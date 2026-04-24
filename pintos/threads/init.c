@@ -71,17 +71,16 @@ main (void) {
 	char **argv;
 
 	/* Clear BSS and get machine's RAM size. */
-	// bss란 초기값이 없는 전역 변수와 static 변수가 놓이는 메모리 영역이다.
 	bss_init ();
 
 	/* Break command line into arguments and parse options. */
-	argv = read_command_line ();  	// 부트로더가 넘겨준 커널 명령줄 읽기
-	argv = parse_options (argv);    // 옵션 해석, 부팅을 어떤 모드로 할지 결정
+	argv = read_command_line ();
+	argv = parse_options (argv);
 
 	/* Initialize ourselves as a thread so we can use locks,
 	   then enable console locking. */
-	thread_init ();  // 현재 실행 흐름을 스레드 시스템에 등록
-	console_init ();  // 콘솔 락을 쓸 수 있게 함
+	thread_init ();
+	console_init ();
 
 	/* Initialize memory system. */
 	mem_end = palloc_init ();
@@ -138,7 +137,7 @@ bss_init (void) {
 	   The start and end of the BSS segment is recorded by the
 	   linker as _start_bss and _end_bss.  See kernel.lds. */
 	extern char _start_bss, _end_bss;
-	memset (&_start_bss, 0, &_end_bss - &_start_bss);  // bss 영역 전체 0으로 초기화
+	memset (&_start_bss, 0, &_end_bss - &_start_bss);
 }
 
 /* Populates the page table with the kernel virtual mapping,
