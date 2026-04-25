@@ -7,53 +7,48 @@
 
 #include "threads/loader.h"
 
-/* Functions and macros for working with virtual addresses.
- *
- * See pte.h for functions and macros specifically for x86
- * hardware page tables. */
+/* 이 구간의 동작과 의도를 설명한다. */
 
 #define BITMASK(SHIFT, CNT) (((1ul << (CNT)) - 1) << (SHIFT))
 
-/* Page offset (bits 0:12). */
-#define PGSHIFT 0                          /* Index of first offset bit. */
-#define PGBITS  12                         /* Number of offset bits. */
-#define PGSIZE  (1 << PGBITS)              /* Bytes in a page. */
-#define PGMASK  BITMASK(PGSHIFT, PGBITS)   /* Page offset bits (0:12). */
+/* 이 구간의 동작과 의도를 설명한다. */
+#define PGSHIFT 0                          /* 이 구간의 동작과 의도를 설명한다. */
+#define PGBITS  12                         /* 이 구간의 동작과 의도를 설명한다. */
+#define PGSIZE  (1 << PGBITS)              /* 이 구간의 동작과 의도를 설명한다. */
+#define PGMASK  BITMASK(PGSHIFT, PGBITS)   /* 이 구간의 동작과 의도를 설명한다. */
 
-/* Offset within a page. */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define pg_ofs(va) ((uint64_t) (va) & PGMASK)
 
 #define pg_no(va) ((uint64_t) (va) >> PGBITS)
 
-/* Round up to nearest page boundary. */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define pg_round_up(va) ((void *) (((uint64_t) (va) + PGSIZE - 1) & ~PGMASK))
 
-/* Round down to nearest page boundary. */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define pg_round_down(va) (void *) ((uint64_t) (va) & ~PGMASK)
 
-/* Kernel virtual address start */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define KERN_BASE LOADER_KERN_BASE
 
-/* User stack start */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define USER_STACK 0x47480000
 
-/* Returns true if VADDR is a user virtual address. */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define is_user_vaddr(vaddr) (!is_kernel_vaddr((vaddr)))
 
-/* Returns true if VADDR is a kernel virtual address. */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define is_kernel_vaddr(vaddr) ((uint64_t)(vaddr) >= KERN_BASE)
 
-// FIXME: add checking
-/* Returns kernel virtual address at which physical address PADDR
- *  is mapped. */
+// 한국어 주석
+/* 이 구간의 동작과 의도를 설명한다. */
 #define ptov(paddr) ((void *) (((uint64_t) paddr) + KERN_BASE))
 
-/* Returns physical address at which kernel virtual address VADDR
- * is mapped. */
+/* 이 구간의 동작과 의도를 설명한다. */
 #define vtop(vaddr) \
 ({ \
 	ASSERT(is_kernel_vaddr(vaddr)); \
 	((uint64_t) (vaddr) - (uint64_t) KERN_BASE);\
 })
 
-#endif /* threads/vaddr.h */
+#endif /* 이 구간의 동작과 의도를 설명한다. */
