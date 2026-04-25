@@ -4,7 +4,7 @@
 #include <round.h>
 #include <stdint.h>
 
-/* 초당 타이머 인터럽트 수입니다. */
+/* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
 
 void timer_init (void);
@@ -20,4 +20,4 @@ void timer_nsleep (int64_t nanoseconds);
 
 void timer_print_stats (void);
 
-#endif /* 장치/timer.h */
+#endif /* devices/timer.h */

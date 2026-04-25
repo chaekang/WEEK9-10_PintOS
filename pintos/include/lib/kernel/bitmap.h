@@ -5,25 +5,25 @@
 #include <stddef.h>
 #include <inttypes.h>
 
-/* 비트맵 추상 데이터 유형입니다. */
+/* Bitmap abstract data type. */
 
-/* 창조와 파괴. */
+/* Creation and destruction. */
 struct bitmap *bitmap_create (size_t bit_cnt);
 struct bitmap *bitmap_create_in_buf (size_t bit_cnt, void *, size_t byte_cnt);
 size_t bitmap_buf_size (size_t bit_cnt);
 void bitmap_destroy (struct bitmap *);
 
-/* 비트맵 크기. */
+/* Bitmap size. */
 size_t bitmap_size (const struct bitmap *);
 
-/* 단일 비트 설정 및 테스트. */
+/* Setting and testing single bits. */
 void bitmap_set (struct bitmap *, size_t idx, bool);
 void bitmap_mark (struct bitmap *, size_t idx);
 void bitmap_reset (struct bitmap *, size_t idx);
 void bitmap_flip (struct bitmap *, size_t idx);
 bool bitmap_test (const struct bitmap *, size_t idx);
 
-/* 여러 비트를 설정하고 테스트합니다. */
+/* Setting and testing multiple bits. */
 void bitmap_set_all (struct bitmap *, bool);
 void bitmap_set_multiple (struct bitmap *, size_t start, size_t cnt, bool);
 size_t bitmap_count (const struct bitmap *, size_t start, size_t cnt, bool);
@@ -32,12 +32,12 @@ bool bitmap_any (const struct bitmap *, size_t start, size_t cnt);
 bool bitmap_none (const struct bitmap *, size_t start, size_t cnt);
 bool bitmap_all (const struct bitmap *, size_t start, size_t cnt);
 
-/* 설정된 또는 설정되지 않은 비트 찾기. */
+/* Finding set or unset bits. */
 #define BITMAP_ERROR SIZE_MAX
 size_t bitmap_scan (const struct bitmap *, size_t start, size_t cnt, bool);
 size_t bitmap_scan_and_flip (struct bitmap *, size_t start, size_t cnt, bool);
 
-/* 파일 입력 및 출력. */
+/* File input and output. */
 #ifdef FILESYS
 struct file;
 size_t bitmap_file_size (const struct bitmap *);
@@ -45,7 +45,7 @@ bool bitmap_read (struct bitmap *, struct file *);
 bool bitmap_write (const struct bitmap *, struct file *);
 #endif
 
-/* 디버깅. */
+/* Debugging. */
 void bitmap_dump (const struct bitmap *);
 
-#endif /* lib/커널/bitmap.h */
+#endif /* lib/kernel/bitmap.h */

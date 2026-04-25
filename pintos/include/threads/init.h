@@ -6,15 +6,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* 실제 메모리 크기(4KB 페이지)입니다. */
+/* Physical memory size, in 4 kB pages. */
 extern size_t ram_pages;
 
-/* 커널 매핑만 포함된 페이지 맵 레벨 4. */
+/* Page map level 4 with kernel mappings only. */
 extern uint64_t *base_pml4;
 
-/* -q: 커널 작업이 완료되면 전원을 끄시겠습니까? */
+/* -q: Power off when kernel tasks complete? */
 extern bool power_off_when_done;
 
 void power_off (void) NO_RETURN;
 
-#endif /* 스레드/init.h */
+#endif /* threads/init.h */
