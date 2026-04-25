@@ -66,6 +66,8 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+static bool wakeup_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -217,13 +219,14 @@ thread_create (const char *name, int priority,
 void
 thread_sleep (int64_t wakeup_tick) {
 	enum intr_level old_level;
-	old_level = intr_disable ();
-
 	struct thread *curr = thread_current();
+	
+	old_level = intr_disable ();
 	curr->wakeup_tick = wakeup_tick;
 
 	if (curr != idle_thread)
-		list_push_back (&sleep_list, &curr->elem);
+		// 이전 코드 list_push_back (&sleep_list, &curr->elem);
+		list_insert_ordered (&sleep_list, &curr->elem, wakeup_less, NULL);
 
 	thread_block();
 	intr_set_level (old_level);
@@ -243,15 +246,16 @@ thread_block (void) {
 	schedule ();
 }
 
+/* 원래 썼던 코드 
 void
 thread_awake (int64_t current_tick){
-	/*sleep_list를 처음부터 끝까지 순회할 방법이 있나*/
+	// sleep_list를 처음부터 끝까지 순회할 방법이 있나
 	struct list_elem *e = list_begin(&sleep_list);
 	while (e != list_end(&sleep_list)) {
 		struct thread *t = list_entry(e, struct thread, elem);
 		struct list_elem *next = list_next(e);
-		/*만약 sleep_list의 원소가 들어있는 스레드의 wakeup_tick이 current_tick보다 작거나 같으면*/
-		/*해당 원소를 sleep_list에서 꺼내고, 해당 원소가 들어있는 스레드를 thread_unblock()한다*/
+		// 만약 sleep_list의 원소가 들어있는 스레드의 wakeup_tick이 current_tick보다 작거나 같으면
+		//해당 원소를 sleep_list에서 꺼내고, 해당 원소가 들어있는 스레드를 thread_unblock()한다
 		if (t->wakeup_tick <= current_tick) {
 			list_remove(e);
 			thread_unblock(t);
@@ -259,11 +263,25 @@ thread_awake (int64_t current_tick){
 		e = next;
 	}
 }
-/*
+
 인터럽트 핸들러에서 매 tick마다 sleep_list 전체를 끝까지 도는 구조라, 스레드가 늘면 timer_interrupt()가 무거워질 수 있어요.
 thread.c (line 247), timer.c (line 129)
 지금 구현은 동작 방향은 맞지만, 리스트가 정렬돼 있지 않아서 매 tick 전체 순회를 강제합니다. 작은 테스트는 버틸 수 있어도, 인터럽트 핸들러는 가능한 짧게 끝내는 쪽이 안전해요. 정렬된 sleep_list를 유지하면 앞부분만 보고 멈출 수 있어서 더 낫습니다.
 */
+
+void
+thread_awake (int64_t current_tick) {
+	while (!list_empty (&sleep_list)) {
+		struct thread *t;
+
+		t = list_entry (list_front (&sleep_list), struct thread, elem);
+		if (t->wakeup_tick > current_tick) {
+			break;
+		}
+		list_pop_front (&sleep_list);
+		thread_unblock (t);
+	}
+}
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -284,6 +302,17 @@ thread_unblock (struct thread *t) {
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
+}
+
+static bool
+wakeup_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *ta = list_entry (a, struct thread, elem);
+	struct thread *tb = list_entry (b, struct thread, elem);
+
+	if (ta->wakeup_tick != tb->wakeup_tick)
+		return ta->wakeup_tick < tb->wakeup_tick;
+
+	return ta->priority > tb->priority;
 }
 
 /* Returns the name of the running thread. */

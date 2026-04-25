@@ -138,7 +138,7 @@ struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
-	int64_t	wakeup_tick;
+	int64_t	wakeup_tick;				/* Tick at which this thread should wake. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 
