@@ -10,31 +10,31 @@
 #endif
 
 
-/* States in a thread's life cycle. */
+/* 스레드 생명주기의 상태들. */
 enum thread_status {
-	THREAD_RUNNING,     /* Running thread. */
-	THREAD_READY,       /* Not running but ready to run. */
-	THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-	THREAD_DYING        /* About to be destroyed. */
+	THREAD_RUNNING,     /* 실행 중인 스레드. */
+	THREAD_READY,       /* 실행 중은 아니지만 실행 준비가 된 상태. */
+	THREAD_BLOCKED,     /* 어떤 이벤트가 발생하기를 기다리는 상태. */
+	THREAD_DYING        /* 곧 파괴될 상태. */
 };
 
-/* Thread identifier type.
-   You can redefine this to whatever type you like. */
+/* 스레드 식별자 타입.
+   원하는 타입으로 다시 정의해도 된다. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+#define TID_ERROR ((tid_t) -1)          /* `tid_t`의 오류 값. */
 
-/* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
-#define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
+/* 스레드 우선순위. */
+#define PRI_MIN 0                       /* 가장 낮은 우선순위. */
+#define PRI_DEFAULT 31                  /* 기본 우선순위. */
+#define PRI_MAX 63                      /* 가장 높은 우선순위. */
 
-/* A kernel thread or user process.
+/* 커널 스레드 또는 사용자 프로세스.
  *
- * Each thread structure is stored in its own 4 kB page.  The
- * thread structure itself sits at the very bottom of the page
- * (at offset 0).  The rest of the page is reserved for the
- * thread's kernel stack, which grows downward from the top of
- * the page (at offset 4 kB).  Here's an illustration:
+ * 각 스레드 구조체는 자신만의 4 kB 페이지에 저장된다.
+ * 스레드 구조체 자체는 페이지 맨 아래(오프셋 0)에 놓이고,
+ * 나머지 영역은 스레드의 커널 스택으로 예약된다. 이 스택은
+ * 페이지 맨 위(오프셋 4 kB)에서 아래 방향으로 자란다.
+ * 그림으로 나타내면 다음과 같다.
  *
  *      4 kB +---------------------------------+
  *           |          kernel stack           |
@@ -59,59 +59,59 @@ typedef int tid_t;
  *           |              status             |
  *      0 kB +---------------------------------+
  *
- * The upshot of this is twofold:
+ * 여기서 중요한 점은 두 가지다.
  *
- *    1. First, `struct thread' must not be allowed to grow too
- *       big.  If it does, then there will not be enough room for
- *       the kernel stack.  Our base `struct thread' is only a
- *       few bytes in size.  It probably should stay well under 1
- *       kB.
+ *    1. 첫째, `struct thread`가 너무 커지면 안 된다.
+ *       너무 커지면 커널 스택을 둘 공간이 부족해진다.
+ *       기본 `struct thread`는 몇 바이트밖에 되지 않으므로,
+ *       1 kB보다 훨씬 작게 유지하는 편이 좋다.
  *
- *    2. Second, kernel stacks must not be allowed to grow too
- *       large.  If a stack overflows, it will corrupt the thread
- *       state.  Thus, kernel functions should not allocate large
- *       structures or arrays as non-static local variables.  Use
- *       dynamic allocation with malloc() or palloc_get_page()
- *       instead.
+ *    2. 둘째, 커널 스택도 너무 커지면 안 된다.
+ *       스택이 넘치면 스레드 상태를 망가뜨린다. 따라서
+ *       커널 함수는 큰 구조체나 배열을 비정적 지역 변수로
+ *       잡지 말아야 한다. 대신 `malloc()`이나
+ *       `palloc_get_page()` 같은 동적 할당을 사용하라.
  *
- * The first symptom of either of these problems will probably be
- * an assertion failure in thread_current(), which checks that
- * the `magic' member of the running thread's `struct thread' is
- * set to THREAD_MAGIC.  Stack overflow will normally change this
- * value, triggering the assertion. */
-/* The `elem' member has a dual purpose.  It can be an element in
- * the run queue (thread.c), or it can be an element in a
- * semaphore wait list (synch.c).  It can be used these two ways
- * only because they are mutually exclusive: only a thread in the
- * ready state is on the run queue, whereas only a thread in the
- * blocked state is on a semaphore wait list. */
+ * 이런 문제의 첫 징후는 보통 `thread_current()`에서 나는
+ * assertion 실패다. 이 함수는 실행 중인 스레드의
+ * `struct thread` 안 `magic` 멤버가 `THREAD_MAGIC`인지
+ * 검사한다. 스택 오버플로가 나면 대개 이 값이 바뀌어
+ * assertion이 발생한다. */
+/* `elem` 멤버는 두 가지 용도로 쓰인다. `thread.c`의 실행
+ * 큐 원소가 될 수도 있고, `synch.c`의 세마포어 대기 리스트
+ * 원소가 될 수도 있다. 이 두 용도가 동시에 겹치지 않는 이유는
+ * 준비 상태의 스레드만 실행 큐에 있고, 블록 상태의 스레드만
+ * 세마포어 대기 리스트에 있기 때문이다. */
 struct thread {
-	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	/* `thread.c`가 관리한다. */
+	tid_t tid;                          /* 스레드 식별자. */
+	enum thread_status status;          /* 스레드 상태. */
+	char name[16];                      /* 이름(디버깅용). */
+	int priority;                       /* 우선순위. */
 
-	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+	/* 스레드가 깨어나야 하는 절대 tick 시각. */
+	int64_t wakeup_tick;
+
+	/* `thread.c`와 `synch.c`가 함께 사용한다. */
+	struct list_elem elem;              /* 리스트 원소. */
 
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
-	uint64_t *pml4;                     /* Page map level 4 */
+	/* `userprog/process.c`가 관리한다. */
+	uint64_t *pml4;                     /* 4단계 페이지 맵. */
 #endif
 #ifdef VM
-	/* Table for whole virtual memory owned by thread. */
+	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
 	struct supplemental_page_table spt;
 #endif
 
-	/* Owned by thread.c. */
-	struct intr_frame tf;               /* Information for switching */
-	unsigned magic;                     /* Detects stack overflow. */
+	/* `thread.c`가 관리한다. */
+	struct intr_frame tf;               /* 문맥 전환용 정보. */
+	unsigned magic;                     /* 스택 오버플로를 감지한다. */
 };
 
-/* If false (default), use round-robin scheduler.
-   If true, use multi-level feedback queue scheduler.
-   Controlled by kernel command-line option "-o mlfqs". */
+/* false(기본값)면 라운드 로빈 스케줄러를 사용한다.
+   true면 다단계 피드백 큐 스케줄러를 사용한다.
+   커널 명령줄 옵션 `-o mlfqs`로 제어한다. */
 extern bool thread_mlfqs;
 
 void thread_init (void);
@@ -123,6 +123,7 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
+void thread_sleep (int64_t);
 void thread_block (void);
 void thread_unblock (struct thread *);
 

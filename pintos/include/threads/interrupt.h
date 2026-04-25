@@ -4,10 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Interrupts on or off? */
+/* 인터럽트가 켜져 있는가, 꺼져 있는가? */
 enum intr_level {
-	INTR_OFF,             /* Interrupts disabled. */
-	INTR_ON               /* Interrupts enabled. */
+	INTR_OFF,             /* 인터럽트 비활성화. */
+	INTR_ON               /* 인터럽트 활성화. */
 };
 
 enum intr_level intr_get_level (void);
@@ -15,7 +15,7 @@ enum intr_level intr_set_level (enum intr_level);
 enum intr_level intr_enable (void);
 enum intr_level intr_disable (void);
 
-/* Interrupt stack frame. */
+/* 인터럽트 스택 프레임. */
 struct gp_registers {
 	uint64_t r15;
 	uint64_t r14;
@@ -35,8 +35,8 @@ struct gp_registers {
 } __attribute__((packed));
 
 struct intr_frame {
-	/* Pushed by intr_entry in intr-stubs.S.
-	   These are the interrupted task's saved registers. */
+	/* `intr-stubs.S`의 `intr_entry`가 푸시한다.
+	   인터럽트된 작업의 레지스터를 저장한 값이다. */
 	struct gp_registers R;
 	uint16_t es;
 	uint16_t __pad1;
@@ -44,14 +44,14 @@ struct intr_frame {
 	uint16_t ds;
 	uint16_t __pad3;
 	uint32_t __pad4;
-	/* Pushed by intrNN_stub in intr-stubs.S. */
-	uint64_t vec_no; /* Interrupt vector number. */
-/* Sometimes pushed by the CPU,
-   otherwise for consistency pushed as 0 by intrNN_stub.
-   The CPU puts it just under `eip', but we move it here. */
+	/* `intr-stubs.S`의 `intrNN_stub`가 푸시한다. */
+	uint64_t vec_no; /* 인터럽트 벡터 번호. */
+/* 경우에 따라 CPU가 푸시하고,
+   그렇지 않으면 일관성을 위해 `intrNN_stub`가 0을 푸시한다.
+   CPU는 원래 이를 `eip` 바로 아래에 두지만, 여기로 옮겨 둔다. */
 	uint64_t error_code;
-/* Pushed by the CPU.
-   These are the interrupted task's saved registers. */
+/* CPU가 푸시한다.
+   인터럽트된 작업의 레지스터를 저장한 값이다. */
 	uintptr_t rip;
 	uint16_t cs;
 	uint16_t __pad5;
