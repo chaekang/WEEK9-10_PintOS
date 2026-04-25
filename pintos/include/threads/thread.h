@@ -10,111 +10,53 @@
 #endif
 
 
-/* States in a thread's life cycle. */
+/* 이 구간의 동작과 의도를 설명한다. */
 enum thread_status {
-	THREAD_RUNNING,     /* Running thread. */
-	THREAD_READY,       /* Not running but ready to run. */
-	THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-	THREAD_DYING        /* About to be destroyed. */
+	THREAD_RUNNING,     /* 이 구간의 동작과 의도를 설명한다. */
+	THREAD_READY,       /* 이 구간의 동작과 의도를 설명한다. */
+	THREAD_BLOCKED,     /* 이 구간의 동작과 의도를 설명한다. */
+	THREAD_DYING        /* 이 구간의 동작과 의도를 설명한다. */
 };
 
-/* Thread identifier type.
-   You can redefine this to whatever type you like. */
+/* 이 구간의 동작과 의도를 설명한다. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+#define TID_ERROR ((tid_t) -1)          /* 이 구간의 동작과 의도를 설명한다. */
 
-/* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
-#define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
+/* 이 구간의 동작과 의도를 설명한다. */
+#define PRI_MIN 0                       /* 이 구간의 동작과 의도를 설명한다. */
+#define PRI_DEFAULT 31                  /* 이 구간의 동작과 의도를 설명한다. */
+#define PRI_MAX 63                      /* 이 구간의 동작과 의도를 설명한다. */
 
-/* A kernel thread or user process.
- *
- * Each thread structure is stored in its own 4 kB page.  The
- * thread structure itself sits at the very bottom of the page
- * (at offset 0).  The rest of the page is reserved for the
- * thread's kernel stack, which grows downward from the top of
- * the page (at offset 4 kB).  Here's an illustration:
- *
- *      4 kB +---------------------------------+
- *           |          kernel stack           |
- *           |                |                |
- *           |                |                |
- *           |                V                |
- *           |         grows downward          |
- *           |                                 |
- *           |                                 |
- *           |                                 |
- *           |                                 |
- *           |                                 |
- *           |                                 |
- *           |                                 |
- *           |                                 |
- *           +---------------------------------+
- *           |              magic              |
- *           |            intr_frame           |
- *           |                :                |
- *           |                :                |
- *           |               name              |
- *           |              status             |
- *      0 kB +---------------------------------+
- *
- * The upshot of this is twofold:
- *
- *    1. First, `struct thread' must not be allowed to grow too
- *       big.  If it does, then there will not be enough room for
- *       the kernel stack.  Our base `struct thread' is only a
- *       few bytes in size.  It probably should stay well under 1
- *       kB.
- *
- *    2. Second, kernel stacks must not be allowed to grow too
- *       large.  If a stack overflows, it will corrupt the thread
- *       state.  Thus, kernel functions should not allocate large
- *       structures or arrays as non-static local variables.  Use
- *       dynamic allocation with malloc() or palloc_get_page()
- *       instead.
- *
- * The first symptom of either of these problems will probably be
- * an assertion failure in thread_current(), which checks that
- * the `magic' member of the running thread's `struct thread' is
- * set to THREAD_MAGIC.  Stack overflow will normally change this
- * value, triggering the assertion. */
-/* The `elem' member has a dual purpose.  It can be an element in
- * the run queue (thread.c), or it can be an element in a
- * semaphore wait list (synch.c).  It can be used these two ways
- * only because they are mutually exclusive: only a thread in the
- * ready state is on the run queue, whereas only a thread in the
- * blocked state is on a semaphore wait list. */
+/* 이 구간의 동작과 의도를 설명한다. */
+/* 이 구간의 동작과 의도를 설명한다. */
 struct thread {
-	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	/* 이 구간의 동작과 의도를 설명한다. */
+	tid_t tid;                          /* 이 구간의 동작과 의도를 설명한다. */
+	enum thread_status status;          /* 이 구간의 동작과 의도를 설명한다. */
+	char name[16];                      /* 이 구간의 동작과 의도를 설명한다. */
+	int priority;                       /* 이 구간의 동작과 의도를 설명한다. */
 
-	/* 스레드가 깨어나야 하는 절대 tick 시각. */
+	/* 이 구간의 동작과 의도를 설명한다. */
 	int64_t wakeup_tick;
 
-	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+	/* 이 구간의 동작과 의도를 설명한다. */
+	struct list_elem elem;              /* 이 구간의 동작과 의도를 설명한다. */
 
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
-	uint64_t *pml4;                     /* Page map level 4 */
+	/* 이 구간의 동작과 의도를 설명한다. */
+	uint64_t *pml4;                     /* 이 구간의 동작과 의도를 설명한다. */
 #endif
 #ifdef VM
-	/* Table for whole virtual memory owned by thread. */
+	/* 이 구간의 동작과 의도를 설명한다. */
 	struct supplemental_page_table spt;
 #endif
 
-	/* Owned by thread.c. */
-	struct intr_frame tf;               /* Information for switching */
-	unsigned magic;                     /* Detects stack overflow. */
+	/* 이 구간의 동작과 의도를 설명한다. */
+	struct intr_frame tf;               /* 이 구간의 동작과 의도를 설명한다. */
+	unsigned magic;                     /* 이 구간의 동작과 의도를 설명한다. */
 };
 
-/* If false (default), use round-robin scheduler.
-   If true, use multi-level feedback queue scheduler.
-   Controlled by kernel command-line option "-o mlfqs". */
+/* 이 구간의 동작과 의도를 설명한다. */
 extern bool thread_mlfqs;
 
 void thread_init (void);
@@ -148,4 +90,4 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
-#endif /* threads/thread.h */
+#endif /* 이 구간의 동작과 의도를 설명한다. */
