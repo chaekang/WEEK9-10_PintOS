@@ -10,53 +10,109 @@
 #endif
 
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 스레드 수명 주기의 상태입니다. */
 enum thread_status {
-	THREAD_RUNNING,     /* 이 구간의 동작과 의도를 설명한다. */
-	THREAD_READY,       /* 이 구간의 동작과 의도를 설명한다. */
-	THREAD_BLOCKED,     /* 이 구간의 동작과 의도를 설명한다. */
-	THREAD_DYING        /* 이 구간의 동작과 의도를 설명한다. */
+	THREAD_RUNNING,     /* 스레드를 실행 중입니다. */
+	THREAD_READY,       /* 실행 중이 아니지만 실행할 준비가 되었습니다. */
+	THREAD_BLOCKED,     /* 이벤트가 실행되기를 기다리고 있습니다. */
+	THREAD_DYING        /* 곧 파괴될 예정입니다. */
 };
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 스레드 식별자 유형.
+   원하는 유형으로 이를 재정의할 수 있습니다. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) -1)          /* 이 구간의 동작과 의도를 설명한다. */
+#define TID_ERROR ((tid_t) -1)          /* tid_t의 오류 값입니다. */
 
-/* 이 구간의 동작과 의도를 설명한다. */
-#define PRI_MIN 0                       /* 이 구간의 동작과 의도를 설명한다. */
-#define PRI_DEFAULT 31                  /* 이 구간의 동작과 의도를 설명한다. */
-#define PRI_MAX 63                      /* 이 구간의 동작과 의도를 설명한다. */
+/* 스레드 우선순위. */
+#define PRI_MIN 0                       /* 가장 낮은 우선순위. */
+#define PRI_DEFAULT 31                  /* 기본 우선순위. */
+#define PRI_MAX 63                      /* 가장 높은 우선순위. */
 
-/* 이 구간의 동작과 의도를 설명한다. */
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 커널 스레드 또는 사용자 프로세스.
+ *
+ * 각 스레드 구조는 자체 4kB 페이지에 저장됩니다.  
+ * 스레드 구조 자체는 페이지 맨 아래에 위치합니다.
+ * (오프셋 0에서).  
+ * 스레드의 커널 스택은 스레드의 맨 위에서 아래로 성장합니다.
+ * 페이지(오프셋 4kB).  
+ *
+ *      4 kB +---------------------------------+
+ * |          
+ *           |                |                |
+ *           |                |                |
+ *           |                V                |
+ * |         
+ *           |                                 |
+ *           |                                 |
+ *           |                                 |
+ *           |                                 |
+ *           |                                 |
+ *           |                                 |
+ *           |                                 |
+ *           |                                 |
+ *           +---------------------------------+
+ * |              
+ * |            
+ *           |                :                |
+ *           |                :                |
+ * |               
+ * |              
+ *      0 kB +---------------------------------+
+ *
+ * 이것의 결과는 두 가지입니다:
+ *
+ * 1. 첫째, `struct thread'가 너무 커지는 것을 허용해서는 안 됩니다.
+ *       큰.  
+ * 커널 스택.  
+ * 크기는 몇 바이트입니다.  
+ *       kB.
+ *
+ * 2. 둘째, 커널 스택이 너무 커지면 안 됩니다.
+ *       크기가 큰.  
+ *       상태.  
+ * 비정적 지역 변수로서의 구조체 또는 배열.  
+ * malloc() 또는 palloc_get_page()를 사용한 동적 할당
+ *       대신에.
+ *
+ * 이러한 문제 중 하나의 첫 번째 증상은 아마도 다음과 같습니다.
+ * thread_current()에서 어설션 실패, 이를 확인함
+ * 실행 중인 스레드의 `struct thread'의 `magic' 멤버는 다음과 같습니다.
+ * THREAD_MAGIC으로 설정됩니다.  
+ * 값, 어설션을 트리거합니다. */
+/* `elem' 멤버는 두 가지 목적을 가지고 있습니다.  
+ * 실행 큐(thread.c) 또는
+ * 세마포 대기자 목록(synch.c).  
+ * 상호 배타적이기 때문에:
+ * 준비 상태는 실행 큐에 있는 반면, 실행 큐에는 스레드만 있습니다.
+ * 차단된 상태는 세마포 대기자 명단에 있습니다. */
 struct thread {
-	/* 이 구간의 동작과 의도를 설명한다. */
-	tid_t tid;                          /* 이 구간의 동작과 의도를 설명한다. */
-	enum thread_status status;          /* 이 구간의 동작과 의도를 설명한다. */
-	char name[16];                      /* 이 구간의 동작과 의도를 설명한다. */
-	int priority;                       /* 이 구간의 동작과 의도를 설명한다. */
+	/* thread.c가 소유합니다. */
+	tid_t tid;                          /* 스레드 식별자. */
+	enum thread_status status;          /* 스레드 상태. */
+	char name[16];                      /* 이름(디버깅 목적). */
+	int priority;                       /* 우선 사항. */
+	int64_t wakeup_tick;                /* 스레드가 깨어날 절대 틱 시각. */
 
-	/* 이 구간의 동작과 의도를 설명한다. */
-	int64_t wakeup_tick;
-
-	/* 이 구간의 동작과 의도를 설명한다. */
-	struct list_elem elem;              /* 이 구간의 동작과 의도를 설명한다. */
+	/* thread.c와 synch.c 간에 공유됩니다. */
+	struct list_elem elem;              /* 요소 나열. */
 
 #ifdef USERPROG
-	/* 이 구간의 동작과 의도를 설명한다. */
-	uint64_t *pml4;                     /* 이 구간의 동작과 의도를 설명한다. */
+	/* userprog/process.c가 소유합니다. */
+	uint64_t *pml4;                     /* 페이지 맵 레벨 4 */
 #endif
 #ifdef VM
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 스레드가 소유한 전체 가상 메모리에 대한 테이블입니다. */
 	struct supplemental_page_table spt;
 #endif
 
-	/* 이 구간의 동작과 의도를 설명한다. */
-	struct intr_frame tf;               /* 이 구간의 동작과 의도를 설명한다. */
-	unsigned magic;                     /* 이 구간의 동작과 의도를 설명한다. */
+	/* thread.c가 소유합니다. */
+	struct intr_frame tf;               /* 전환 정보 */
+	unsigned magic;                     /* 스택 오버플로를 감지합니다. */
 };
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* False(기본 값)인 경우에는 충격을 사용합니다.
+   참인 경우, 다단계 피드백 대기열 스케줄러를 사용합니다.
+   구문줄 옵션 "-o mlfqs" 로 제어됩니다. */
 extern bool thread_mlfqs;
 
 void thread_init (void);
@@ -90,4 +146,4 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
-#endif /* 이 구간의 동작과 의도를 설명한다. */
+#endif /* 스레드/thread.h */

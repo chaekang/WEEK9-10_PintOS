@@ -4,7 +4,6 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
-#include "list.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -16,40 +15,44 @@
 #include "userprog/process.h"
 #endif
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 구조체 스레드의 `마법' 멤버에 대한 무작위 값.
+   스택 오버플로를 감지하는 데 사용됩니다. 맨 위에 있는 큰 댓글 보기
+   자세한 내용은 thread.h입니다. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 기본 스레드에 대한 무작위 값
+   이 값을 수정하지 마십시오. */
 #define THREAD_BASIC 0xd42df210
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* THREAD_READY 상태의 프로세스 목록, 즉 프로세스 목록
+   실행할 준비가 되어 있지만 실제로 실행되지는 않습니다. */
 static struct list ready_list;
-
-/* 자고 있는 스레드들의 리스트 */
 static struct list sleep_list;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 유휴 스레드. */
 static struct thread *idle_thread;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 원시 스레드, init.c: main()을 실행하는 스레드입니다. */
 static struct thread *initial_thread;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Allocate_tid()에서 사용하는 잠금입니다. */
 static struct lock tid_lock;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 스레드 파기 요청 */
 static struct list destruction_req;
 
-/* 이 구간의 동작과 의도를 설명한다. */
-static long long idle_ticks;    /* 이 구간의 동작과 의도를 설명한다. */
-static long long kernel_ticks;  /* 이 구간의 동작과 의도를 설명한다. */
-static long long user_ticks;    /* 이 구간의 동작과 의도를 설명한다. */
+/* 통계 기능 */
+static long long idle_ticks;    /* 유휴 상태로 사용한 타이머 틱 수입니다. */
+static long long kernel_ticks;  /* 커널 스레드의 타이머 틱 수. */
+static long long user_ticks;    /* 사용자 프로그램에서 타이머 틱 수. */
 
-/* 이 구간의 동작과 의도를 설명한다. */
-#define TIME_SLICE 4            /* 이 구간의 동작과 의도를 설명한다. */
-static unsigned thread_ticks;   /* 이 구간의 동작과 의도를 설명한다. */
+/* 일정 계획 */
+#define TIME_SLICE 4            /* 각 스레드를 줄 타이머 틱 수. */
+static unsigned thread_ticks;   /* 마지막 수율 이후 타이머 틱 수. */
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* False(기본값)인 경우에는 충격을 사용합니다.
+   참인 경우, 다단계 피드백 대기열 스케줄러를 사용합니다.
+   해석줄 옵션 “-o mlfqs” 로 제어됩니다. */
 bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
@@ -60,67 +63,86 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static bool is_wakeup_tick_earlier (const struct list_elem *, const struct list_elem *, void *aux);
 static void schedule (void);
-
 static tid_t allocate_tid (void);
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* T가 없으면 스레드를 표시한다는 의미로 보이면 true를 반환합니다. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 실행 중인 스레드를 반환합니다.
+ * CPU의 그리드 포인터 `rsp'를 읽은 다음
+ *페이지 시작 부분까지. 
+ * 항상 페이지의 시작 부분에 있으며 스택 포인터는
+ * 중간 어딘가에서 큐런트 스레드를 찾습니다. */
 #define running_thread() ((struct thread *) (pg_round_down (rrsp ())))
 
 
-// 한국어 주석
-// 한국어 주석
-// 한국어 주석
+// THREAD_START에 대한 글로벌 설명자표.
+// GDT는 thread_init 후에 설정되기 때문에
+// 임시 gdt를 먼저 설정합니다.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 코드를 변환하여 스레딩 시스템을 초기화합니다.
+   현재 스레드로 실행 중입니다. 이 작업은 에서 수행할 수 없습니다.
+   일반적이고 이 경우에는 로더 S 때문에만 가능합니다.
+   스택의 하단을 페이지 경계에 놓는 것을 조심스러워했다.
+
+   또한 실행 중인 모니터와 tid가 잠긴 상태로 점프합니다.
+
+   이 함수를 호출한 후에는 페이지를 초기화해야 합니다.
+   로 스레드를 생성하기 전에 할당자
+   thread_create().
+
+   이 함수까지 thread_current ()를 호출하는 것은 실패하지 않습니다.
+   마감재 */
 void
 thread_init (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 임시로 GDT를 다시 로드합니다.
+	 * 이 gdt에는 사용자 확장이 포함됩니다.
+	 * 코너는 gdt_init()에서 사용자 컨텍스트를 사용하여 gdt를 재구축합니다. */
 	struct desc_ptr gdt_ds = {
 		.size = sizeof (gdt) - 1,
 		.address = (uint64_t) gdt
 	};
 	lgdt (&gdt_ds);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 글로블라 스레드 컨텍스트 시작 */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&sleep_list);
 	list_init (&destruction_req);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 실행 중인 스레드에 대한 스레드 구조를 설정합니다. */
 	initial_thread = running_thread ();
 	init_thread (initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 인터럽트를 활성화하여 사전 스레드 스케줄링을 시작합니다.
+   또한 유휴 스레드를 만듭니다. */
 void
 thread_start (void) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 유휴 스레드를 만듭니다. */
 	struct semaphore idle_started;
 	sema_init (&idle_started, 0);
 	thread_create ("idle", PRI_MIN, idle, &idle_started);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 선점형 스레드 일정을 시작하세요. */
 	intr_enable ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 유휴 스레드가 유휴 스레드를 가져올 때까지 기다립니다. */
 	sema_down (&idle_started);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 타이머 틱마다 타이머 인터럽트 핸들러가 호출합니다.
+   따라서 이 함수는 외부 인터럽트 컨텍스트에서 실행됩니다. */
 void
 thread_tick (void) {
 	struct thread *t = thread_current ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 통계를 업데이트합니다. */
 	if (t == idle_thread)
 		idle_ticks++;
 #ifdef USERPROG
@@ -130,19 +152,33 @@ thread_tick (void) {
 	else
 		kernel_ticks++;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 선점을 시행합니다. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 스레드 통계를 인쇄합니다. */
 void
 thread_print_stats (void) {
 	printf ("Thread: %lld idle ticks, %lld kernel ticks, %lld user ticks\n",
 			idle_ticks, kernel_ticks, user_ticks);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 지정된 이니셜을 사용하여 이름이라는 이름의 새 커널 스레드를 만듭니다.
+   AUX를 인수로 전달하는 챔피언십을 달성하는 선두,
+   준비 대기열에 추가합니다. 스레드 식별자를 반환합니다
+   새 스레드가 있는 경우, 또는 생성에 실패하면 TID_ERROR.
+
+   THREAD_START ()가 호출된 경우 새 스레드는
+   thread_create()가 다시 시작되기 전에 종료될 수도 있습니다.
+   thread_create ()가 다시 되기 전에.반대로, 원본은
+   스레드는 새 스레드가 실행되기 전에 임의의 시간 동안 실행될 수 있습니다.
+   예정되어 있습니다. 세마포어 또는 다른 형태의
+   주문을 확인해야 하는 경우 동기화.
+
+   제공된 코드는 새 스레드의 `우선 순위' 멤버를 다음으로 설정합니다.
+   우선순위이지만 실제 우선순위 스케줄링은 구현되지 않습니다.
+   우선순위 스케줄링은 문제 1-3의 목표입니다. */
 tid_t
 thread_create (const char *name, int priority,
 		thread_func *function, void *aux) {
@@ -151,16 +187,17 @@ thread_create (const char *name, int priority,
 
 	ASSERT (function != NULL);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 스레드를 할당합니다. */
 	t = palloc_get_page (PAL_ZERO);
 	if (t == NULL)
 		return TID_ERROR;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 스레드 초기화. */
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 예약된 경우 kernel_thread를 호출합니다.
+	 *참고) rdi는 첫 번째 인수이고, rsi는 두 번째 인수입니다. */
 	t->tf.rip = (uintptr_t) kernel_thread;
 	t->tf.R.rdi = (uint64_t) function;
 	t->tf.R.rsi = (uint64_t) aux;
@@ -170,44 +207,45 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 대기열에 추가 */
 	thread_unblock (t);
 
 	return tid;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 틱까지 도달한 수면 스레드를 깨운다. */
 void
 thread_awake (int64_t current_tick) {
 	while (!list_empty (&sleep_list)) {
 		struct list_elem *front = list_front (&sleep_list);
 		struct thread *sleeping_thread = list_entry (front, struct thread, elem);
-		if (sleeping_thread->wakeup_tick > current_tick) {
+		if (sleeping_thread->wakeup_tick > current_tick)
 			break;
-		}
 
 		list_pop_front (&sleep_list);
 		thread_unblock (sleeping_thread);
 	}
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드를 지정한 절대 틱까지 재운다. */
 void
 thread_sleep (int64_t wakeup_tick) {
 	struct thread *current = thread_current ();
-	enum intr_level old_level;
+	enum intr_level old_level = intr_disable ();
 
-	old_level = intr_disable ();
 	current->wakeup_tick = wakeup_tick;
 	list_insert_ordered (&sleep_list, &current->elem, is_wakeup_tick_earlier, NULL);
-
 	thread_block ();
 
 	intr_set_level (old_level);
 }
 
+/* 현재 스레드를 절전 모드로 전환합니다. 일정이 잡히지 않습니다.
+   thread_unblock ()에 의해 표현되는 날까지 다시.
 
-/* 이 구간의 동작과 의도를 설명한다. */
+   이 함수는 인터럽트가 꺼진 상태에서 호출되어야 합니다. 그것은
+   일반적으로 동기화 중 하나를 사용하는 것이 좋습니다.
+   sync.h의 프리미티브 */
 void
 thread_block (void) {
 	ASSERT (!intr_context ());
@@ -216,18 +254,24 @@ thread_block (void) {
 	schedule ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 두 스레드의 기상 틱을 오름차순으로 비교한다. */
 static bool
 is_wakeup_tick_earlier (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct thread *thread_a = list_entry (a, struct thread, elem);
 	struct thread *thread_b = list_entry (b, struct thread, elem);
-	if (thread_a->wakeup_tick != thread_b->wakeup_tick) {
+	if (thread_a->wakeup_tick != thread_b->wakeup_tick)
 		return thread_a->wakeup_tick < thread_b->wakeup_tick;
-	}
 	return false;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 차단된 스레드 T를 실행 준비 상태로 전환합니다.
+   T가 사랑받지 못한 경우입니다. 
+   실행 중인 스레드를 준비합니다.)
+
+   이 함수는 실행 중인 스레드를 선점하지 않습니다. 이것은
+   중요: 발신자가 인터럽트를 비활성화한 경우,
+   스레드를 원자적으로 해제할 수 있다고 예상할 수 있으며
+   다른 데이터를 업데이트합니다. */
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -241,31 +285,38 @@ thread_unblock (struct thread *t) {
 	intr_set_level (old_level);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 실행 중인 스레드의 이름을 반환합니다. */
 const char *
 thread_name (void) {
 	return thread_current ()->name;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 실행 중인 스레드를 반환합니다.
+   running_thread()와 몇 가지 건전성 검사입니다.
+   자세한 내용은 thread.h 상단의 큰 댓글을 참조하세요. */
 struct thread *
 thread_current (void) {
 	struct thread *t = running_thread ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* T가 정말로 실인지 확인하십시오.
+	   이러한 주장 중 하나가 발화하면 스레드가
+	   그리드를 바닥에 깔았습니다. 
+	   몇 개의 큰 자동 배열 또는 중간
+	   재귀는 스택 오버플로를 일으킬 수 있습니다. */
 	ASSERT (is_thread (t));
 	ASSERT (t->status == THREAD_RUNNING);
 
 	return t;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 실행 중인 스레드의 tid를 반환합니다. */
 tid_t
 thread_tid (void) {
 	return thread_current ()->tid;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드를 일정을 해제하고 파괴합니다. 절대
+   발신자에게 돌아갑니다. */
 void
 thread_exit (void) {
 	ASSERT (!intr_context ());
@@ -274,13 +325,15 @@ thread_exit (void) {
 	process_exit ();
 #endif
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 상태를 죽는 것으로 설정하고 다른 절차를 예약하기만 하면 됩니다.
+	   SCHEDULE_TAIL ()호출 중에 폐기됩니다. */
 	intr_disable ();
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* CPU를 양보합니다. 
+   스케줄러의 변덕에 즉시 다시 예약될 수 있습니다. */
 void
 thread_yield (void) {
 	struct thread *curr = thread_current ();
@@ -295,46 +348,54 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드의 첫 번째 순위를 NEW_PRIORITY로 설정합니다. */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드의 우선 순위를 반환합니다. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드의 값을 멋져요로 설정합니다. */
 void
 thread_set_nice (int nice UNUSED) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* TODO:구현이 여기에 표시됩니다. */
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드의 좋은 값을 반환합니다. */
 int
 thread_get_nice (void) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* TODO:구현이 여기에 표시됩니다. */
 	return 0;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 시스템 부하 평균의 100배를 반환합니다. */
 int
 thread_get_load_avg (void) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* TODO:구현이 여기에 표시됩니다. */
 	return 0;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 현재 스레드의 최근_cpu 값은 100배를 반환합니다. */
 int
 thread_get_recent_cpu (void) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* TODO:구현이 여기에 표시됩니다. */
 	return 0;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 유휴 스레드. 다른 스레드를 실행할 준비가 되지 않았을 때 실행됩니다.
+
+   유휴 스레드는 처음에 준비 목록에
+   thread_start ()처음에는 한 번 예약이 있습니다.
+   Idle_thread를 뛰어 넘고 세마포가 건배된 "up"을 가리고 있습니다.
+   계속하려면 thread_start()를 즉시 활성화하고
+   블록입니다. 그 후, 유휴 스레드는
+   여러분 목록입니다. 
+   준비 목록이 비어 있을 때의 특수한 경우입니다. */
 static void
 idle (void *idle_started_ UNUSED) {
 	struct semaphore *idle_started = idle_started_;
@@ -343,27 +404,39 @@ idle (void *idle_started_ UNUSED) {
 	sema_up (idle_started);
 
 	for (;;) {
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* 다른 사람이 달리도록 내버려두세요. */
 		intr_disable ();
 		thread_block ();
 
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* 인터럽트를 다시 활성화하고 다음 인터럽트를 기다립니다.
+
+		   'STI' 지침은
+		   다음 지시의 완료, 그래서이 두
+		   명령은 원자적으로 실행됩니다. 이 원자는
+		   중요; 그렇지 않으면 인터럽트가 처리될 수 있음
+		   인터럽트를 다시 활성화하고 다음을 기다리는 사이
+		   1 클럭 틱만큼 낭비하는 일이 발생합니다.
+		   때문에.
+
+		   [IA32-v2a] "HLT", [IA32-v2b] "STI" 및 [IA32-v3a] 참조
+		   7.11.1 "HLT지침". */
 		asm volatile ("sti; hlt" : : : "memory");
 	}
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 커널 스레드의 기반으로 사용되는 함수입니다. */
 static void
 kernel_thread (thread_func *function, void *aux) {
 	ASSERT (function != NULL);
 
-	intr_enable ();       /* 이 구간의 동작과 의도를 설명한다. */
-	function (aux);       /* 이 구간의 동작과 의도를 설명한다. */
-	thread_exit ();       /* 이 구간의 동작과 의도를 설명한다. */
+	intr_enable ();       /* 스케줄러가 인터럽트 오프 상태로 실행됩니다. */
+	function (aux);       /* 실함수를 실행한다. */
+	thread_exit ();       /* 함수 () 가 반환되면 스레드를 죽입니다. */
 }
 
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 라는 블록된 스레드로 T의 기본 초기화를 수행합니다.
+   이름 */
 static void
 init_thread (struct thread *t, const char *name, int priority) {
 	ASSERT (t != NULL);
@@ -378,7 +451,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 예약할 다음 스레드를 선택하고 반환합니다.
+   실행 대기열이 다음과 같은 경우를 제외하고 실행 대기열에서 스레드를 반환합니다.
+   비어 있습니다. (실행 중인 스레드가 계속 실행될 수 있으면
+   실행 대기열에 있을 것입니다.) 실행 대기열이 비어 있으면
+   유휴_스레드. */
 static struct thread *
 next_thread_to_run (void) {
 	if (list_empty (&ready_list))
@@ -387,7 +464,7 @@ next_thread_to_run (void) {
 		return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 이레츠를 사용하여 스레드 실행 */
 void
 do_iret (struct intr_frame *tf) {
 	__asm __volatile(
@@ -415,20 +492,33 @@ do_iret (struct intr_frame *tf) {
 			: : "g" ((uint64_t) tf) : "memory");
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 새 스레드의 페이지를 활성화하여 스레드 전환
+   이전 스레드가 죽어가는 경우 테이블을 파괴합니다.
+
+   이 함수의 호출에서 우리는 방금 스레드에서 전환했습니다
+   이전, 새 스레드가 이미 실행 중이며 인터럽트는
+   여전히 비활성화되어 있습니다.
+
+   스레드 전환이 끝나기 전까지 printf()를 호출하는 것은 실행되지 않습니다.
+   꼭. 
+   함수 끝에 추가되었습니다. */
 static void
 thread_launch (struct thread *th) {
 	uint64_t tf_cur = (uint64_t) &running_thread ()->tf;
 	uint64_t tf = (uint64_t) &th->tf;
 	ASSERT (intr_get_level () == INTR_OFF);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 주요 스위칭 로직.
+	 *먼저 전체 실행 컨텍스트를 intr_frame에서 복구했습니다.
+	 * 그런 다음 do_iret를 호출하여 다음 스레드로 전환합니다.
+	 * 여기서부터 스택을 사용해서는 안됩니다.
+	 * 전환이 완료될 때까지. */
 	__asm __volatile (
-			/* 이 구간의 동작과 의도를 설명한다. */
+			/* 사용될 스토어 레지스터. */
 			"push %%rax\n"
 			"push %%rbx\n"
 			"push %%rcx\n"
-			/* 이 구간의 동작과 의도를 설명한다. */
+			/* 한 번 입력 가져오기 */
 			"movq %0, %%rax\n"
 			"movq %1, %%rcx\n"
 			"movq %%r15, 0(%%rax)\n"
@@ -443,26 +533,26 @@ thread_launch (struct thread *th) {
 			"movq %%rdi, 72(%%rax)\n"
 			"movq %%rbp, 80(%%rax)\n"
 			"movq %%rdx, 88(%%rax)\n"
-			"pop %%rbx\n"              // 한국어 주석
+			"pop %%rbx\n"              // RCX가 없어
 			"movq %%rbx, 96(%%rax)\n"
-			"pop %%rbx\n"              // 한국어 주석
+			"pop %%rbx\n"              // RBX가 있음
 			"movq %%rbx, 104(%%rax)\n"
-			"pop %%rbx\n"              // 한국어 주석
+			"pop %%rbx\n"              // 저장된 랙스
 			"movq %%rbx, 112(%%rax)\n"
 			"addq $120, %%rax\n"
 			"movw %%es, (%%rax)\n"
 			"movw %%ds, 8(%%rax)\n"
 			"addq $32, %%rax\n"
-			"call __next\n"         // 한국어 주석
+			"call __next\n"         // 현재 RIP을 읽었습니다.
 			"__next:\n"
 			"pop %%rbx\n"
 			"addq $(out_iret -  __next), %%rbx\n"
-			"movq %%rbx, 0(%%rax)\n" // 한국어 주석
-			"movw %%cs, 8(%%rax)\n"  // 한국어 주석
+			"movq %%rbx, 0(%%rax)\n" // 복사하다
+			"movw %%cs, 8(%%rax)\n"  // CS
 			"pushfq\n"
 			"popq %%rbx\n"
-			"mov %%rbx, 16(%%rax)\n" // 한국어 주석
-			"mov %%rsp, 24(%%rax)\n" // 한국어 주석
+			"mov %%rbx, 16(%%rax)\n" // 깃발
+			"mov %%rsp, 24(%%rax)\n" // 있습니다.
 			"movw %%ss, 32(%%rax)\n"
 			"mov %%rcx, %%rdi\n"
 			"call do_iret\n"
@@ -471,7 +561,10 @@ thread_launch (struct thread *th) {
 			);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 새로운 프로세스를 예약합니다. 출입구에서 인터럽트는 꺼져 있어야 합니다.
+ * 이 기능은 현재 스레드의 상태를 상태로 수정한 다음
+ * 는 실행할 다른 스레드를 찾아 전환합니다.
+ * Schedule()에서 printf()를 호출하는 것은 안전하지 않습니다. */
 static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
@@ -493,30 +586,37 @@ schedule (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (curr->status != THREAD_RUNNING);
 	ASSERT (is_thread (next));
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 실행 중으로 표시합니다. */
 	next->status = THREAD_RUNNING;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 새 시간 분할을 시작합니다. */
 	thread_ticks = 0;
 
 #ifdef USERPROG
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 새 주소 공간을 활성화합니다. */
 	process_activate (next);
 #endif
 
 	if (curr != next) {
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* 전환한 스레드가 죽어가는 경우 해당 스레드의 구조를 파괴합니다.
+		   실. 
+		   러그를 꺼내세요.
+		   페이지가 다음과 같기 때문에 여기에서 페이지 무료 요청을 대기열에 넣습니다.
+		   현재 스택에서 사용하고 있습니다.
+		   실제 파괴 논리는
+		   진행일 설정 */
 		if (curr && curr->status == THREAD_DYING && curr != initial_thread) {
 			ASSERT (curr != next);
 			list_push_back (&destruction_req, &curr->elem);
 		}
 
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* 스레드를 전환하기 전에 먼저 정보를 저장합니다.
+		 * 현재 실행 중. */
 		thread_launch (next);
 	}
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 새 스레드를 사용하여 tid를 반환합니다. */
 static tid_t
 allocate_tid (void) {
 	static tid_t next_tid = 1;

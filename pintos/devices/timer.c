@@ -8,7 +8,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 8254 타이머 칩의 하드웨어 세부사항은 [8254]를 참조하십시오. */
 
 #if TIMER_FREQ < 19
 #error 8254 timer requires TIMER_FREQ >= 19
@@ -17,10 +17,11 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* OS 부팅 이후 타이머 틱 수입니다. */
 static int64_t ticks;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 타이머 틱당 루프 수입니다.
+   timer_calibrate()에 의해 호출됩니다. */
 static unsigned loops_per_tick;
 
 static intr_handler_func timer_interrupt;
@@ -28,20 +29,23 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 8254 프로그래밍 가능 간격 타이머(PIT)를 다음과 같이 설정합니다.
+   정당한 PIT_FREQ 감동을 받고 등록했습니다.
+   해당 인터럽트. */
 void
 timer_init (void) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 8254 입력을 TIMER_FREQ로 반올림합니다.
+	   가장 가까운. */
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
 
-	outb (0x43, 0x34);    /* 이 구간의 동작과 의도를 설명한다. */
+	outb (0x43, 0x34);    /* CW: 카운터 0, LSB, MSB, 모드 2, 바이너리. */
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 단기적인 지연을 구현하는 데 사용되는 loops_per_tick을 수정합니다. */
 void
 timer_calibrate (void) {
 	unsigned high_bit, test_bit;
@@ -49,14 +53,15 @@ timer_calibrate (void) {
 	ASSERT (intr_get_level () == INTR_ON);
 	printf ("Calibrating timer...  ");
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 가장 큰 2의 퍼즐제곱으로 loops_per_tick을 대략적으로 계산합니다.
+	   여전히 타이머 틱이 1개 미만입니다. */
 	loops_per_tick = 1u << 10;
 	while (!too_many_loops (loops_per_tick << 1)) {
 		loops_per_tick <<= 1;
 		ASSERT (loops_per_tick != 0);
 	}
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* loops_per_tick의 다음 8비트를 신청합니다. */
 	high_bit = loops_per_tick;
 	for (test_bit = high_bit >> 1; test_bit != high_bit >> 10; test_bit >>= 1)
 		if (!too_many_loops (high_bit | test_bit))
@@ -65,7 +70,7 @@ timer_calibrate (void) {
 	printf ("%'"PRIu64" loops/s.\n", (uint64_t) loops_per_tick * TIMER_FREQ);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* OS 부팅 이후 타이머 틱 수를 반환합니다. */
 int64_t
 timer_ticks (void) {
 	enum intr_level old_level = intr_disable ();
@@ -75,52 +80,51 @@ timer_ticks (void) {
 	return t;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 그러면 이후에는 타이머가 종료될 수 있습니다.
+   timer_ticks()에는 반드시 있어야 합니다. */
 int64_t
 timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* TICKS의 타이머 틱 약 동안 실행을 잠시 중단합니다. */
 void
 timer_sleep (int64_t ticks) {
 	int64_t start;
 
 	ASSERT (intr_get_level () == INTR_ON);
-	if (ticks <= 0) {
+	if (ticks <= 0)
 		return;
-	}
+
 	start = timer_ticks ();
 	thread_sleep (start + ticks);
 }
 
-
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 약 MS 밀리초 동안 실행을 일시 중단합니다. */
 void
 timer_msleep (int64_t ms) {
 	real_time_sleep (ms, 1000);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 약 마이크로초 동안 실행을 일시 중지합니다. */
 void
 timer_usleep (int64_t us) {
 	real_time_sleep (us, 1000 * 1000);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 약 NS나노초 동안 실행을 일시 중지합니다. */
 void
 timer_nsleep (int64_t ns) {
 	real_time_sleep (ns, 1000 * 1000 * 1000);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 타이머 통계를 인쇄합니다. */
 void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
-
-/* 이 구간의 동작과 의도를 설명한다. */
+
+/* 타이머 인터럽트 핸들러. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
@@ -128,42 +132,58 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	thread_tick ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LOOPS 반복이 두 번 더 타이머를 기다리는 경우를 반환합니다.
+   체크하고, 그렇지 않으면 거짓입니다. */
 static bool
 too_many_loops (unsigned loops) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 타이머 틱을 기다립니다. */
 	int64_t start = ticks;
 	while (ticks == start)
 		barrier ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* LOOPS 루프를 실행합니다. */
 	start = ticks;
 	busy_wait (loops);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 틱 수가 변경되면 너무 오랫동안 반복한 것입니다. */
 	barrier ();
 	return start != ticks;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 형태를 구성하는 루프 LOOPS를 반복합니다.
+   짧은 지연.
+
+   코드가 크게 변경될 수 있습니다. NO_INLINE으로 표시되었습니다.
+   타이밍에 영향을 미치므로 이 함수가 인라인된 경우
+   장소마다 다르므로 결과가 어려울 수 있습니다.
+   예측하다. */
 static void NO_INLINE
 busy_wait (int64_t loops) {
 	while (loops-- > 0)
 		barrier ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* NUM/DENOM초 동안 수면을 취하세요. */
 static void
 real_time_sleep (int64_t num, int32_t denom) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* NUM/DENOM초를 타이머로 변환하고 내림합니다.
+
+	   (NUM / DENOM) 초
+	   --------- = NUM ​​​​* TIMER_FREQ / DENOM 틱.
+	   1초 / TIMER_FREQ 틱
+	   */
 	int64_t ticks = num * TIMER_FREQ / denom;
 
 	ASSERT (intr_get_level () == INTR_ON);
 	if (ticks > 0) {
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* 우리는 적어도 하나의 풀 타이머 틱을 기다리고 있습니다.  
+		   타이머_수면()은 CPU를 다른 사람에게 양보하기 때문입니다.
+		   프로세스. */
 		timer_sleep (ticks);
 	} else {
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* 그렇지 않으면 보다 정확한 작업을 위해 바쁜 대기 루프를 사용하십시오.
+		   서브틱 타이밍.  
+		   오버플로 가능성을 피하기 위해 1000으로 줄입니다. */
 		ASSERT (denom % 1000 == 0);
 		busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
 	}

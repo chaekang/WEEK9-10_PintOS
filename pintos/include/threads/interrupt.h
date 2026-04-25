@@ -4,10 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 인터럽트를 켜거나 끄나요? */
 enum intr_level {
-	INTR_OFF,             /* 이 구간의 동작과 의도를 설명한다. */
-	INTR_ON               /* 이 구간의 동작과 의도를 설명한다. */
+	INTR_OFF,             /* 인터럽트가 비활성화되었습니다. */
+	INTR_ON               /* 인터럽트가 활성화되었습니다. */
 };
 
 enum intr_level intr_get_level (void);
@@ -15,7 +15,7 @@ enum intr_level intr_set_level (enum intr_level);
 enum intr_level intr_enable (void);
 enum intr_level intr_disable (void);
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 스택 프레임을 인터럽트합니다. */
 struct gp_registers {
 	uint64_t r15;
 	uint64_t r14;
@@ -35,7 +35,8 @@ struct gp_registers {
 } __attribute__((packed));
 
 struct intr_frame {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* intr-stubs.S의 intr_entry에 의해 푸시되었습니다.
+	   이는 중단된 작업의 저장된 레지스터입니다. */
 	struct gp_registers R;
 	uint16_t es;
 	uint16_t __pad1;
@@ -43,11 +44,14 @@ struct intr_frame {
 	uint16_t ds;
 	uint16_t __pad3;
 	uint32_t __pad4;
-	/* 이 구간의 동작과 의도를 설명한다. */
-	uint64_t vec_no; /* 이 구간의 동작과 의도를 설명한다. */
-/* 이 구간의 동작과 의도를 설명한다. */
+	/* intr-stubs.S의 intrNN_stub에 의해 푸시되었습니다. */
+	uint64_t vec_no; /* 인터럽트 벡터 수. */
+/* 때로는 CPU에 의해 밀려나기도 합니다.
+   그렇지 않으면 일관성을 위해 intrNN_stub에 의해 0으로 푸시됩니다.
+   CPU는 이를 'eip' 바로 아래에 두지만 우리는 여기로 옮깁니다. */
 	uint64_t error_code;
-/* 이 구간의 동작과 의도를 설명한다. */
+/* CPU에 의해 푸시됩니다.
+   이는 중단된 작업의 저장된 레지스터입니다. */
 	uintptr_t rip;
 	uint16_t cs;
 	uint16_t __pad5;
@@ -71,4 +75,4 @@ void intr_yield_on_return (void);
 void intr_dump_frame (const struct intr_frame *);
 const char *intr_name (uint8_t vec);
 
-#endif /* 이 구간의 동작과 의도를 설명한다. */
+#endif /* 스레드/interrupt.h */

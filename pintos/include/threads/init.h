@@ -6,15 +6,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 실제 메모리 크기(4KB 페이지)입니다. */
 extern size_t ram_pages;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 커널 매핑만 포함된 페이지 맵 레벨 4. */
 extern uint64_t *base_pml4;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* -q: 커널 작업이 완료되면 전원을 끄시겠습니까? */
 extern bool power_off_when_done;
 
 void power_off (void) NO_RETURN;
 
-#endif /* 이 구간의 동작과 의도를 설명한다. */
+#endif /* 스레드/init.h */

@@ -1,30 +1,59 @@
 #include "list.h"
 #include "../debug.h"
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 이중 연결 목록에는 "head"라는 두 개의 헤더 요소가 있습니다.
+   첫 번째 요소 바로 앞과 바로 뒤의 "꼬리"
+   마지막 요소.  
+   뒷 헤더의 '다음' 링크입니다.  
+   목록의 내부 요소를 통해 서로를 가리킵니다.
+
+   빈 목록은 다음과 같습니다.
+
+   +------+     +------+
+   <---| 
+   +------+     +------+
+
+   두 개의 요소가 포함된 목록은 다음과 같습니다.
+
+   +------+     +-------+     +-------+     +------+
+   <---| 
+   +------+     +-------+     +-------+     +------+
+
+   이 배열의 대칭으로 인해 많은 특수 요소가 제거됩니다.
+   목록 처리의 경우.  
+   list_remove(): 두 개의 포인터 할당만 필요하며
+   조건부.  
+   헤더 요소가 없습니다.
+
+   (각 헤더 요소의 포인터 중 하나만 사용되기 때문에,
+   실제로 이를 단일 헤더 요소로 결합할 수 있습니다.
+   이 단순함을 희생하지 않고.  
+   요소를 사용하면 일부 요소를 약간 확인할 수 있습니다.
+   이는 가치 있는 작업입니다.) */
 
 static bool is_sorted (struct list_elem *a, struct list_elem *b,
 		list_less_func *less, void *aux) UNUSED;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* ELEM이 헤드이면 true를 반환하고, 그렇지 않으면 false를 반환합니다. */
 static inline bool
 is_head (struct list_elem *elem) {
 	return elem != NULL && elem->prev == NULL && elem->next != NULL;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* ELEM이 내부 요소인 경우 true를 반환합니다.
+   그렇지 않으면 거짓입니다. */
 static inline bool
 is_interior (struct list_elem *elem) {
 	return elem != NULL && elem->prev != NULL && elem->next != NULL;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* ELEM이 꼬리이면 true를 반환하고, 그렇지 않으면 false를 반환합니다. */
 static inline bool
 is_tail (struct list_elem *elem) {
 	return elem != NULL && elem->prev != NULL && elem->next == NULL;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST를 빈 목록으로 초기화합니다. */
 void
 list_init (struct list *list) {
 	ASSERT (list != NULL);
@@ -34,63 +63,96 @@ list_init (struct list *list) {
 	list->tail.next = NULL;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 시작 부분을 반환합니다.  */
 struct list_elem *
 list_begin (struct list *list) {
 	ASSERT (list != NULL);
 	return list->head.next;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 목록에서 ELEM 다음의 요소를 반환합니다.  
+   목록의 마지막 요소는 목록 꼬리를 반환합니다.  
+   ELEM 자체가 목록 꼬리인 경우 정의되지 않습니다. */
 struct list_elem *
 list_next (struct list_elem *elem) {
 	ASSERT (is_head (elem) || is_interior (elem));
 	return elem->next;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 꼬리를 반환합니다.
+
+   list_end()는 다음에서 목록을 반복하는 데 자주 사용됩니다.
+   앞에서 뒤로.  
+   예. */
 struct list_elem *
 list_end (struct list *list) {
 	ASSERT (list != NULL);
 	return &list->tail;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 반복을 위해 LIST의 역방향 시작을 반환합니다.
+   LIST를 역순으로 뒤에서 앞으로 나열합니다. */
 struct list_elem *
 list_rbegin (struct list *list) {
 	ASSERT (list != NULL);
 	return list->tail.prev;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 목록에서 ELEM 앞에 있는 요소를 반환합니다.  
+   목록의 첫 번째 요소는 목록 헤드를 반환합니다.  
+   ELEM 자체가 목록 헤드인 경우 정의되지 않습니다. */
 struct list_elem *
 list_prev (struct list_elem *elem) {
 	ASSERT (is_interior (elem) || is_tail (elem));
 	return elem->prev;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 헤드를 반환합니다.
+
+   list_rend()는 목록을 반복하는 데 자주 사용됩니다.
+   역순으로 뒤에서 앞으로.  
+   list.h 상단의 예를 따르세요.
+
+   for (e = list_rbegin (&foo_list); e != list_rend (&foo_list);
+   e = 목록_이전 (e))
+   {
+   struct foo *f = list_entry (e, struct foo, elem);
+   ...f로 뭔가를 해보세요...
+   }
+   */
 struct list_elem *
 list_rend (struct list *list) {
 	ASSERT (list != NULL);
 	return &list->head;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Return의 LIST의 헤드입니다.
+
+   list_head()는 대체 스타일의 반복에 사용될 수 있습니다.
+   목록을 통해, 예:
+
+   e = 목록_헤드(&list);
+   while ((e = list_next (e)) != list_end (&list))
+   {
+   ...
+   }
+   */
 struct list_elem *
 list_head (struct list *list) {
 	ASSERT (list != NULL);
 	return &list->head;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Return의 LIST의 꼬리입니다. */
 struct list_elem *
 list_tail (struct list *list) {
 	ASSERT (list != NULL);
 	return &list->tail;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* BEFORE 바로 앞에 ELEM을 삽입합니다.
+   내부 요소 또는 꼬리.  
+   목록_푸시_백(). */
 void
 list_insert (struct list_elem *before, struct list_elem *elem) {
 	ASSERT (is_interior (before) || is_tail (before));
@@ -102,7 +164,9 @@ list_insert (struct list_elem *before, struct list_elem *elem) {
 	before->prev = elem;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 해당 요소에서 FIRST부터 LAST까지(독점) 요소를 제거합니다.
+   현재 목록을 선택한 다음 BEFORE 바로 앞에 삽입합니다.
+   내부 요소이거나 꼬리일 수 있습니다. */
 void
 list_splice (struct list_elem *before,
 		struct list_elem *first, struct list_elem *last) {
@@ -114,30 +178,65 @@ list_splice (struct list_elem *before,
 	ASSERT (is_interior (first));
 	ASSERT (is_interior (last));
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 현재 목록에서 FIRST...LAST를 완전히 제거합니다. */
 	first->prev->next = last->next;
 	last->next->prev = first->prev;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* FIRST...LAST를 새 목록에 연결합니다. */
 	first->prev = before->prev;
 	last->next = before;
 	before->prev->next = first;
 	before->prev = last;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 시작 부분에 ELEM을 삽입하여 LIST가 됩니다.
+   LIST의 앞부분. */
 void
 list_push_front (struct list *list, struct list_elem *elem) {
 	list_insert (list_begin (list), elem);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Inserts ELEM at the end of LIST, so that it becomes the
+   목록으로 돌아갑니다. */
 void
 list_push_back (struct list *list, struct list_elem *elem) {
 	list_insert (list_end (list), elem);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 목록에서 ELEM을 제거하고 해당 요소를 반환합니다.
+   그것을 따랐다.  
+
+   ELEM을 목록의 요소로 처리하는 것은 안전하지 않습니다.
+   그것을 제거합니다.  
+   제거 후 ELEM에서 정의되지 않은 동작이 발생합니다.  
+   목록의 요소를 제거하는 순진한 루프는 실패합니다.
+
+ ** 이렇게 하지 마세요 **
+ for (e = list_begin (&list); e != list_end (&list); e = list_next (e))
+ {
+ ...전자로 뭔가 해보세요...
+ 목록_제거(e);
+ }
+ ** 이렇게 하지 마세요 **
+
+ 다음은 요소를 반복하고 제거하는 올바른 방법 중 하나입니다.
+목록:
+
+for (e = list_begin (&list); e != list_end (&list); e = list_remove (e))
+{
+...전자로 뭔가 해보세요...
+}
+
+목록의 요소를 free()해야 한다면 다음과 같이 해야 합니다.
+더 보수적입니다.  
+그 경우에도:
+
+동안(!list_empty(&목록))
+{
+struct list_elem *e = list_pop_front (&list);
+...전자로 뭔가 해보세요...
+}
+*/
 struct list_elem *
 list_remove (struct list_elem *elem) {
 	ASSERT (is_interior (elem));
@@ -146,7 +245,8 @@ list_remove (struct list_elem *elem) {
 	return elem->next;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST에서 앞의 요소를 제거하고 반환합니다.
+   제거하기 전에 LIST가 비어 있으면 정의되지 않은 동작입니다. */
 struct list_elem *
 list_pop_front (struct list *list) {
 	struct list_elem *front = list_front (list);
@@ -154,7 +254,8 @@ list_pop_front (struct list *list) {
 	return front;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST에서 뒤쪽 요소를 제거하고 반환합니다.
+   제거하기 전에 LIST가 비어 있으면 정의되지 않은 동작입니다. */
 struct list_elem *
 list_pop_back (struct list *list) {
 	struct list_elem *back = list_back (list);
@@ -162,21 +263,24 @@ list_pop_back (struct list *list) {
 	return back;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 앞부분 요소를 반환합니다.
+   LIST가 비어 있으면 정의되지 않은 동작입니다. */
 struct list_elem *
 list_front (struct list *list) {
 	ASSERT (!list_empty (list));
 	return list->head.next;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 뒤쪽 요소를 반환합니다.
+   LIST가 비어 있으면 정의되지 않은 동작입니다. */
 struct list_elem *
 list_back (struct list *list) {
 	ASSERT (!list_empty (list));
 	return list->tail.prev;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 요소 수를 반환합니다.
+   요소 수에서 O(n)으로 실행됩니다. */
 size_t
 list_size (struct list *list) {
 	struct list_elem *e;
@@ -187,13 +291,13 @@ list_size (struct list *list) {
 	return cnt;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST가 비어 있으면 true를 반환하고, 그렇지 않으면 false를 반환합니다. */
 bool
 list_empty (struct list *list) {
 	return list_begin (list) == list_end (list);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* A와 B가 가리키는 `struct list_elem *'을 교환합니다. */
 static void
 swap (struct list_elem **a, struct list_elem **b) {
 	struct list_elem *t = *a;
@@ -201,7 +305,7 @@ swap (struct list_elem **a, struct list_elem **b) {
 	*b = t;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 순서를 반대로 바꿉니다. */
 void
 list_reverse (struct list *list) {
 	if (!list_empty (list)) {
@@ -214,7 +318,8 @@ list_reverse (struct list *list) {
 	}
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 목록 요소 A부터 B까지(제외)인 경우에만 true를 반환합니다.
+   주어진 보조 데이터 AUX에 따라 순서대로 정렬됩니다. */
 static bool
 is_sorted (struct list_elem *a, struct list_elem *b,
 		list_less_func *less, void *aux) {
@@ -225,7 +330,11 @@ is_sorted (struct list_elem *a, struct list_elem *b,
 	return true;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* A에서 시작하고 B 다음이 아닌 목록에서 끝나는 실행을 찾습니다.
+   LESS에 따라 감소하지 않는 순서의 요소
+   주어진 보조 데이터 AUX.  
+   달리다.
+   A부터 B까지(제외)는 비어 있지 않은 범위를 형성해야 합니다. */
 static struct list_elem *
 find_end_of_run (struct list_elem *a, struct list_elem *b,
 		list_less_func *less, void *aux) {
@@ -240,7 +349,11 @@ find_end_of_run (struct list_elem *a, struct list_elem *b,
 	return a;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* A0 - A1B0(제외)을 A1B0 - B1과 병합합니다.
+   (제외) B1으로 끝나는 결합된 범위를 형성합니다.
+   (독점적인).  
+   LESS 주어진 보조 데이터에 따른 비감소 순서
+   AUX.   */
 static void
 inplace_merge (struct list_elem *a0, struct list_elem *a1b0,
 		struct list_elem *b1,
@@ -261,32 +374,36 @@ inplace_merge (struct list_elem *a0, struct list_elem *a1b0,
 		}
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 주어진 보조 데이터 AUX에 따라 LIST를 정렬합니다.
+   O(n lg n) 시간에 실행되는 자연적인 반복 병합 정렬
+   LIST의 요소 수에 O(1) 공백이 있습니다. */
 void
 list_sort (struct list *list, list_less_func *less, void *aux) {
-	size_t output_run_cnt;        /* 이 구간의 동작과 의도를 설명한다. */
+	size_t output_run_cnt;        /* 현재 패스의 실행 출력 수입니다. */
 
 	ASSERT (list != NULL);
 	ASSERT (less != NULL);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* 목록을 반복적으로 전달하여 인접한 실행을 병합합니다.
+	   단 하나의 실행만 남을 때까지 감소하지 않는 요소. */
 	do {
-		struct list_elem *a0;     /* 이 구간의 동작과 의도를 설명한다. */
-		struct list_elem *a1b0;   /* 이 구간의 동작과 의도를 설명한다. */
-		struct list_elem *b1;     /* 이 구간의 동작과 의도를 설명한다. */
+		struct list_elem *a0;     /* 첫 실행 시작. */
+		struct list_elem *a1b0;   /* 첫 번째 실행이 끝나고 두 번째 실행이 시작됩니다. */
+		struct list_elem *b1;     /* 두 번째 실행을 종료합니다. */
 
 		output_run_cnt = 0;
 		for (a0 = list_begin (list); a0 != list_end (list); a0 = b1) {
-			/* 이 구간의 동작과 의도를 설명한다. */
+			/* 각 반복은 하나의 출력 실행을 생성합니다. */
 			output_run_cnt++;
 
-			/* 이 구간의 동작과 의도를 설명한다. */
+			/* 감소하지 않는 요소로 구성된 인접한 두 개의 연속을 찾습니다.
+			   A0...A1B0 및 A1B0...B1. */
 			a1b0 = find_end_of_run (a0, list_end (list), less, aux);
 			if (a1b0 == list_end (list))
 				break;
 			b1 = find_end_of_run (a1b0, list_end (list), less, aux);
 
-			/* 이 구간의 동작과 의도를 설명한다. */
+			/* 실행을 병합합니다. */
 			inplace_merge (a0, a1b0, b1, less, aux);
 		}
 	}
@@ -295,7 +412,9 @@ list_sort (struct list *list, list_less_func *less, void *aux) {
 	ASSERT (is_sorted (list_begin (list), list_end (list), less, aux));
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST의 적절한 위치에 ELEM을 삽입합니다.
+   주어진 보조 데이터 AUX에 따라 정렬됩니다.
+   LIST의 요소 수에 대해 평균 O(n) 케이스로 실행됩니다. */
 void
 list_insert_ordered (struct list *list, struct list_elem *elem,
 		list_less_func *less, void *aux) {
@@ -311,7 +430,10 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
 	return list_insert (e, elem);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* LIST를 반복하고 각각의 첫 번째 항목을 제외하고 모두 제거합니다.
+   LESS에 따라 동일한 인접 요소 집합
+   주어진 보조 데이터 AUX.  
+   LIST의 요소는 DUPLICATES에 추가됩니다. */
 void
 list_unique (struct list *list, struct list *duplicates,
 		list_less_func *less, void *aux) {
@@ -332,7 +454,10 @@ list_unique (struct list *list, struct list *duplicates,
 			elem = next;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 다음에 따라 가장 큰 값을 가진 LIST의 요소를 반환합니다.
+   주어진 보조 데이터 AUX를 LESS로 설정합니다.  
+   최대값은 목록의 앞부분에 나타나는 것을 반환합니다.  
+   목록이 비어 있으면 꼬리를 반환합니다. */
 struct list_elem *
 list_max (struct list *list, list_less_func *less, void *aux) {
 	struct list_elem *max = list_begin (list);
@@ -346,7 +471,10 @@ list_max (struct list *list, list_less_func *less, void *aux) {
 	return max;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 다음에 따라 가장 작은 값을 가진 LIST의 요소를 반환합니다.
+   주어진 보조 데이터 AUX를 LESS로 설정합니다.  
+   최소, 목록의 앞부분에 나타나는 항목을 반환합니다.  
+   목록이 비어 있으면 꼬리를 반환합니다. */
 struct list_elem *
 list_min (struct list *list, list_less_func *less, void *aux) {
 	struct list_elem *min = list_begin (list);

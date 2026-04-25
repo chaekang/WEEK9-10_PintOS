@@ -10,4 +10,4 @@ void *calloc (size_t, size_t) __attribute__ ((malloc));
 void *realloc (void *, size_t);
 void free (void *);
 
-#endif /* 이 구간의 동작과 의도를 설명한다. */
+#endif /* 스레드/malloc.h */

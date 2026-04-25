@@ -4,10 +4,10 @@
 #include <list.h>
 #include <stdbool.h>
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 카운팅 세마포어. */
 struct semaphore {
-	unsigned value;             /* 이 구간의 동작과 의도를 설명한다. */
-	struct list waiters;        /* 이 구간의 동작과 의도를 설명한다. */
+	unsigned value;             /* 현재 가치. */
+	struct list waiters;        /* 대기 스레드 목록입니다. */
 };
 
 void sema_init (struct semaphore *, unsigned value);
@@ -16,10 +16,10 @@ bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 잠그다. */
 struct lock {
-	struct thread *holder;      /* 이 구간의 동작과 의도를 설명한다. */
-	struct semaphore semaphore; /* 이 구간의 동작과 의도를 설명한다. */
+	struct thread *holder;      /* 스레드 보유 잠금(디버깅용). */
+	struct semaphore semaphore; /* 액세스를 제어하는 ​​바이너리 세마포어입니다. */
 };
 
 void lock_init (struct lock *);
@@ -28,9 +28,9 @@ bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 조건변수. */
 struct condition {
-	struct list waiters;        /* 이 구간의 동작과 의도를 설명한다. */
+	struct list waiters;        /* 대기 스레드 목록입니다. */
 };
 
 void cond_init (struct condition *);
@@ -38,7 +38,11 @@ void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* 최적화 장벽.
+ *
+ * 컴파일러는 전체 작업을 재정렬하지 않습니다.
+ * 최적화 장벽.  
+ * 자세한 내용은 참조 가이드를 참조하세요.*/
 #define barrier() asm volatile ("" : : : "memory")
 
-#endif /* 이 구간의 동작과 의도를 설명한다. */
+#endif /* 스레드/synch.h */
