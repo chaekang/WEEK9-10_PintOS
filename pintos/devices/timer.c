@@ -166,12 +166,49 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
-/* 타이머 인터럽트 핸들러. */
+
+/* 타이머 인터럽트 핸들러.
+   타이머 인터럽트가 발생할 때마다 호출된다.
+   여기서는 전체 tick을 증가시키고, sleep_list에서 깨어날 시간이 된 스레드를 깨운다. */
 static void
-timer_interrupt (struct intr_frame *args UNUSED) {
+timer_interrupt(struct intr_frame *args UNUSED)
+{
+	/* 시스템이 부팅된 뒤 지난 tick 수를 1 증가시킨다. */
 	ticks++;
-	thread_tick ();
+
+	/* 현재 실행 중인 스레드의 timer tick 처리.
+	   time slice 감소, 스케줄링 관련 처리 등이 여기서 수행된다. */
+	thread_tick();
+
+	/* sleep_list에 자고 있는 스레드가 남아 있는 동안 반복한다. */
+	while (!list_empty(&sleep_list))
+	{
+
+		/* sleep_list의 맨 앞 원소를 가져온다.
+		   sleep_list는 wake_tick 기준 오름차순으로 정렬되어 있으므로,
+		   맨 앞 원소가 가장 먼저 깨어날 스레드다. */
+		struct list_elem *e = list_front(&sleep_list);
+
+		/* list_elem만으로는 wake_tick을 알 수 없으므로,
+		   e를 포함하고 있는 struct thread 전체를 찾아낸다. */
+		struct thread *sleeping_thread = list_entry(e, struct thread, elem);
+
+		/* 현재 tick이 sleeping_thread의 wake_tick보다 작으면
+		   아직 깨어날 시간이 되지 않은 것이다.
+		   sleep_list는 정렬되어 있으므로, 맨 앞 스레드가 아직 못 깨면
+		   뒤의 스레드들도 아직 깰 시간이 아니다. */
+		if (ticks < sleeping_thread->wake_tick)
+		{
+			break;
+		}
+
+		/* 깨어날 시간이 된 스레드를 sleep_list에서 제거한다. */
+		list_pop_front(&sleep_list);
+
+		/* 제거한 스레드를 BLOCKED 상태에서 READY 상태로 바꾸고
+		   ready_list에 넣어 스케줄링 대상이 되게 한다. */
+		thread_unblock(sleeping_thread);
+	}
 }
 
 /* LOOPS번 반복하는 데 한 타이머 틱보다 오래 걸리면 true,
