@@ -64,7 +64,7 @@ static void idle (void *aux UNUSED);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
-static bool wake_up_less (const struct list_elem *, const struct list_elem *, void *aux);
+static bool is_wakeup_tick_earlier (const struct list_elem *, const struct list_elem *, void *aux);
 static void schedule (void);
 
 static tid_t allocate_tid (void);
@@ -217,31 +217,34 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
-/* wakeup_tick이 된 스레드들 깨우기 */
-void thread_awake(int64_t now) {
-	while  (!(list_empty(&sleep_list))) {
-	struct list_elem *head = list_begin(&sleep_list);
-	struct thread *t = list_entry(head, struct thread, elem);
-	if (t->wakeup_tick > now) 
-		break;
-	 
-	list_pop_front(&sleep_list);
-	thread_unblock(t);
+/* 현재 tick까지 깨어나야 하는 스레드를 깨운다. */
+void
+thread_awake (int64_t current_tick) {
+	while (!list_empty (&sleep_list)) {
+		struct list_elem *front = list_front (&sleep_list);
+		struct thread *sleeping_thread = list_entry (front, struct thread, elem);
+		if (sleeping_thread->wakeup_tick > current_tick) {
+			break;
+		}
+
+		list_pop_front (&sleep_list);
+		thread_unblock (sleeping_thread);
 	}
 }
 
-/* running thread를 sleep list에 추가하고 block */
-void thread_sleep(int64_t wakeup_tick) {
-	struct thread *curr = thread_current();
+/* 현재 실행 중인 스레드를 sleep_list에 넣고 잠들게 한다. */
+void
+thread_sleep (int64_t wakeup_tick) {
+	struct thread *current = thread_current ();
 	enum intr_level old_level;
 
-	old_level = intr_disable();
-	curr->wakeup_tick = wakeup_tick;
-	list_insert_ordered(&sleep_list, &curr->elem, wake_up_less, NULL);
+	old_level = intr_disable ();
+	current->wakeup_tick = wakeup_tick;
+	list_insert_ordered (&sleep_list, &current->elem, is_wakeup_tick_earlier, NULL);
 
-	thread_block();
+	thread_block ();
 
-	intr_set_level(old_level);
+	intr_set_level (old_level);
 }
 
 
@@ -259,14 +262,15 @@ thread_block (void) {
 	schedule ();
 }
 
-/* ta가 tb보다 앞에 오려면: wakeup_tick이 더 이르거나, 같으면 priority가 더 높음
-   (같은 tick에 깨는 스레드는 높은 우선순위를 먼저 pop → alarm-priority 통과). */
-static bool wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-	struct thread *ta = list_entry(a, struct thread, elem);
-	struct thread *tb = list_entry(b, struct thread, elem);
-
-	if (ta->wakeup_tick != tb->wakeup_tick)
-		return ta->wakeup_tick < tb->wakeup_tick;
+/* wakeup_tick이 더 이른 스레드가 먼저 오도록 비교한다. */
+static bool
+is_wakeup_tick_earlier (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *thread_a = list_entry (a, struct thread, elem);
+	struct thread *thread_b = list_entry (b, struct thread, elem);
+	if (thread_a->wakeup_tick != thread_b->wakeup_tick) {
+		return thread_a->wakeup_tick < thread_b->wakeup_tick;
+	}
+	return false;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
