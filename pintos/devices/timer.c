@@ -103,6 +103,28 @@ timer_sleep (int64_t ticks) {
 		thread_yield ();
 }
 
+static bool wake_tick_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	/*a
+	= 리스트에서 받은 list_elem 주소
+
+	struct thread
+	= 이 elem이 들어있는 바깥 구조체 타입
+
+	elem
+	= struct thread 안에서 list_elem 필드 이름
+	
+	a 주소에서 elem 필드 위치만큼 거꾸로 빼서
+    struct thread 전체 시작 주소를 찾는다*/
+	struct thread *ta = list_entry(a, struct thread, elem); 
+	struct thread *tb = list_entry(b, struct thread, elem);
+
+	/*
+	ta가 tb보다 빨리 깨어나야 하면 true
+	→ list_insert_ordered가 ta를 tb보다 앞에 두게 함*/
+	return ta->wake_tick < tb->wake_tick;	
+}
+
 /* 약 MS밀리초 동안 실행을 멈춘다. */
 void
 timer_msleep (int64_t ms) {
