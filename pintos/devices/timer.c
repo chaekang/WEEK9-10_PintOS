@@ -93,14 +93,32 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* 약 TICKS 타이머 틱 동안 실행을 멈춘다. */
-void
-timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+/* 약 TICKS 타이머 틱 동안 현재 스레드의 실행을 멈춘다. */
+void timer_sleep(int64_t ticks)
+{
+	// sleep할 시간이 0 이하이면 재울 필요가 없으므로 바로 반환한다.
+	if (ticks <= 0)
+		return;
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// sleep_list 조작 중 timer_interrupt가 끼어들지 못하게 인터럽트를 끄고,
+	// 나중에 원래 상태로 복구하기 위해 이전 인터럽트 상태를 저장한다.
+	enum intr_level old_level = intr_disable();
+
+	// timer_sleep을 호출한 현재 실행 중인 스레드를 가져온다.
+	struct thread *cur = thread_current();
+
+	// 현재 시각에 sleep할 tick 수를 더해, 이 스레드가 깨어나야 할 절대 tick 값을 저장한다.
+	cur->wake_tick = timer_ticks() + ticks;
+
+	// sleep_list에 현재 스레드를 wake_tick이 빠른 순서대로 삽입한다.
+	// 리스트에는 thread 전체가 아니라 cur->elem 연결 고리가 들어간다.
+	list_insert_ordered(&sleep_list, &cur->elem, wake_tick_less, NULL);
+
+	// 현재 스레드를 BLOCKED 상태로 바꿔 ready_list에서 실행 대상이 아니게 만든다.
+	thread_block();
+
+	// timer_sleep에 들어오기 전 인터럽트 상태로 복구한다.
+	intr_set_level(old_level);
 }
 
 static bool wake_tick_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
