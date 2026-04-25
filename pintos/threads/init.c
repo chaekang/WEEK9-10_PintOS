@@ -38,15 +38,15 @@
 #include "filesys/fsutil.h"
 #endif
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Page-map-level-4 with kernel mappings only. */
 uint64_t *base_pml4;
 
 #ifdef FILESYS
-/* 이 구간의 동작과 의도를 설명한다. */
+/* -f: Format the file system? */
 static bool format_filesys;
 #endif
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* -q: Power off after kernel tasks complete? */
 bool power_off_when_done;
 
 bool thread_tests;
@@ -64,24 +64,25 @@ static void print_stats (void);
 
 int main (void) NO_RETURN;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Pintos main program. */
 int
 main (void) {
 	uint64_t mem_end;
 	char **argv;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Clear BSS and get machine's RAM size. */
 	bss_init ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Break command line into arguments and parse options. */
 	argv = read_command_line ();
 	argv = parse_options (argv);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Initialize ourselves as a thread so we can use locks,
+	   then enable console locking. */
 	thread_init ();
 	console_init ();
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Initialize memory system. */
 	mem_end = palloc_init ();
 	malloc_init ();
 	paging_init (mem_end);
@@ -91,7 +92,7 @@ main (void) {
 	gdt_init ();
 #endif
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Initialize interrupt handlers. */
 	intr_init ();
 	timer_init ();
 	kbd_init ();
@@ -100,13 +101,13 @@ main (void) {
 	exception_init ();
 	syscall_init ();
 #endif
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Start thread scheduler and enable interrupts. */
 	thread_start ();
 	serial_init_queue ();
 	timer_calibrate ();
 
 #ifdef FILESYS
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Initialize file system. */
 	disk_init ();
 	filesys_init (format_filesys);
 #endif
@@ -117,24 +118,31 @@ main (void) {
 
 	printf ("Boot complete.\n");
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Run actions specified on kernel command line. */
 	run_actions (argv);
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Finish up. */
 	if (power_off_when_done)
 		power_off ();
 	thread_exit ();
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Clear BSS */
 static void
 bss_init (void) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* The "BSS" is a segment that should be initialized to zeros.
+	   It isn't actually stored on disk or zeroed by the kernel
+	   loader, so we have to zero it ourselves.
+
+	   The start and end of the BSS segment is recorded by the
+	   linker as _start_bss and _end_bss.  See kernel.lds. */
 	extern char _start_bss, _end_bss;
 	memset (&_start_bss, 0, &_end_bss - &_start_bss);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Populates the page table with the kernel virtual mapping,
+ * and then sets up the CPU to use the new page directory.
+ * Points base_pml4 to the pml4 it creates. */
 static void
 paging_init (uint64_t mem_end) {
 	uint64_t *pml4, *pte;
@@ -142,8 +150,8 @@ paging_init (uint64_t mem_end) {
 	pml4 = base_pml4 = palloc_get_page (PAL_ASSERT | PAL_ZERO);
 
 	extern char start, _end_kernel_text;
-	// 한국어 주석
-	// 한국어 주석
+	// Maps physical address [0 ~ mem_end] to
+	//   [LOADER_KERN_BASE ~ LOADER_KERN_BASE + mem_end].
 	for (uint64_t pa = 0; pa < mem_end; pa += PGSIZE) {
 		uint64_t va = (uint64_t) ptov(pa);
 
@@ -155,11 +163,12 @@ paging_init (uint64_t mem_end) {
 			*pte = pa | perm;
 	}
 
-	// 한국어 주석
+	// reload cr3
 	pml4_activate(0);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Breaks the kernel command line into words and returns them as
+   an argv-like array. */
 static char **
 read_command_line (void) {
 	static char *argv[LOADER_ARGS_LEN / 2 + 1];
@@ -179,7 +188,7 @@ read_command_line (void) {
 	}
 	argv[argc] = NULL;
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Print kernel command line. */
 	printf ("Kernel command line:");
 	for (i = 0; i < argc; i++)
 		if (strchr (argv[i], ' ') == NULL)
@@ -191,7 +200,8 @@ read_command_line (void) {
 	return argv;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Parses options in ARGV[]
+   and returns the first non-option argument. */
 static char **
 parse_options (char **argv) {
 	for (; *argv != NULL && **argv == '-'; argv++) {
@@ -224,7 +234,7 @@ parse_options (char **argv) {
 	return argv;
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Runs the task specified in ARGV[1]. */
 static void
 run_task (char **argv) {
 	const char *task = argv[1];
@@ -242,17 +252,18 @@ run_task (char **argv) {
 	printf ("Execution of '%s' complete.\n", task);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Executes all of the actions specified in ARGV[]
+   up to the null pointer sentinel. */
 static void
 run_actions (char **argv) {
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* An action. */
 	struct action {
-		char *name;                       /* 이 구간의 동작과 의도를 설명한다. */
-		int argc;                         /* 이 구간의 동작과 의도를 설명한다. */
-		void (*function) (char **argv);   /* 이 구간의 동작과 의도를 설명한다. */
+		char *name;                       /* Action name. */
+		int argc;                         /* # of args, including action name. */
+		void (*function) (char **argv);   /* Function to execute action. */
 	};
 
-	/* 이 구간의 동작과 의도를 설명한다. */
+	/* Table of supported actions. */
 	static const struct action actions[] = {
 		{"run", 2, run_task},
 #ifdef FILESYS
@@ -269,26 +280,27 @@ run_actions (char **argv) {
 		const struct action *a;
 		int i;
 
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* Find action name. */
 		for (a = actions; ; a++)
 			if (a->name == NULL)
 				PANIC ("unknown action `%s' (use -h for help)", *argv);
 			else if (!strcmp (*argv, a->name))
 				break;
 
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* Check for required arguments. */
 		for (i = 1; i < a->argc; i++)
 			if (argv[i] == NULL)
 				PANIC ("action `%s' requires %d argument(s)", *argv, a->argc - 1);
 
-		/* 이 구간의 동작과 의도를 설명한다. */
+		/* Invoke action and advance. */
 		a->function (argv);
 		argv += a->argc;
 	}
 
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Prints a kernel command line help message and powers off the
+   machine. */
 static void
 usage (void) {
 	printf ("\nCommand line syntax: [OPTION...] [ACTION...]\n"
@@ -322,7 +334,8 @@ usage (void) {
 }
 
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Powers down the machine we're running on,
+   as long as we're running on Bochs or QEMU. */
 void
 power_off (void) {
 #ifdef FILESYS
@@ -332,11 +345,11 @@ power_off (void) {
 	print_stats ();
 
 	printf ("Powering off...\n");
-	outw (0x604, 0x2000);               /* 이 구간의 동작과 의도를 설명한다. */
+	outw (0x604, 0x2000);               /* Poweroff command for qemu */
 	for (;;);
 }
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Print statistics about Pintos execution. */
 static void
 print_stats (void) {
 	timer_print_stats ();

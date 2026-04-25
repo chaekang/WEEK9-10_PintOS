@@ -6,15 +6,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Physical memory size, in 4 kB pages. */
 extern size_t ram_pages;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* Page map level 4 with kernel mappings only. */
 extern uint64_t *base_pml4;
 
-/* 이 구간의 동작과 의도를 설명한다. */
+/* -q: Power off when kernel tasks complete? */
 extern bool power_off_when_done;
 
 void power_off (void) NO_RETURN;
 
-#endif /* 이 구간의 동작과 의도를 설명한다. */
+#endif /* threads/init.h */
