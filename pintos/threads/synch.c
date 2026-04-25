@@ -63,7 +63,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current ()->elem, thread_priority_less, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -99,17 +99,33 @@ sema_try_down (struct semaphore *sema) {
    `SEMA` 값을 증가시키고, 대기 중인 스레드가 있으면 하나를 깨운다.
 
    이 함수는 인터럽트 핸들러 안에서 호출할 수 있다. */
-void
-sema_up (struct semaphore *sema) {
+void sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
+	struct thread *t;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
-	sema->value++;
+
+	if (!list_empty (&sema->waiters)) {
+		t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+		thread_unblock(t);
+
+		sema->value++;
+
+		if (t->priority > thread_current()->priority) {
+			if (intr_context()) {
+				intr_yield_on_return();
+			}
+			else {
+				thread_yield();
+			}
+		}
+	}
+	else {
+		sema->value++;
+	}
+
 	intr_set_level (old_level);
 }
 
@@ -264,7 +280,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	list_insert_ordered(&cond->waiters, &waiter.elem, thread_priority_less, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
