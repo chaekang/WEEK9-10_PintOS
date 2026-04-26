@@ -242,6 +242,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 리스트 원소. */
 	struct semaphore semaphore;         /* 해당 세마포어. */
+	int priority;                       /* 원소의 우선순위 */
 };
 
 /* 조건 변수 `COND`를 초기화한다. 조건 변수는 한 코드 조각이
@@ -270,8 +271,7 @@ cond_init (struct condition *cond) {
    이 함수는 잠들 수 있으므로 인터럽트 핸들러 안에서 호출하면
    안 된다. 인터럽트를 끈 상태에서 호출할 수는 있지만, 잠들어야
    하면 인터럽트가 다시 켜진다. */
-void
-cond_wait (struct condition *cond, struct lock *lock) {
+void cond_wait (struct condition *cond, struct lock *lock) {
 	struct semaphore_elem waiter;
 
 	ASSERT (cond != NULL);
@@ -316,4 +316,11 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+bool condition_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+	struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+
+	return sa->priority < sb->priority;
 }
