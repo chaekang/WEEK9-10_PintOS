@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "list.h"
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -65,7 +66,7 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static bool wake_up_less (const struct list_elem *, const struct list_elem *, void *aux);
-static bool priority_more (const struct list_elem *, const struct list_elem *, void *aux);
+static bool priority_ready_more (const struct list_elem *, const struct list_elem *, void *aux);
 static void schedule (void);
 
 static tid_t allocate_tid (void);
@@ -239,12 +240,13 @@ void thread_awake(int64_t now) {
 }
 
 /* 현재 실행 중인 스레드를 sleep 리스트에 넣고 블록한다. */
-void thread_sleep(int64_t wakeup_tick) {
+void thread_sleep(int64_t ticks) {
 	struct thread *curr = thread_current();
 	enum intr_level old_level;
 
 	old_level = intr_disable();
-	curr->wakeup_tick = wakeup_tick;
+	int64_t start = timer_ticks ();
+	curr->wakeup_tick = start + ticks;
 	list_insert_ordered(&sleep_list, &curr->elem, wake_up_less, NULL);
 	thread_block();
 	intr_set_level(old_level);
@@ -280,7 +282,7 @@ wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UN
 }
 
 static bool 
-priority_more (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+priority_ready_more (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct thread *ta = list_entry(a, struct thread, elem);
 	struct thread *tb = list_entry(b, struct thread, elem);
 
@@ -301,7 +303,7 @@ thread_unblock (struct thread *t) {
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 	t->wakeup_tick = 0;
-	list_insert_ordered(&ready_list, &t->elem, priority_more, NULL);
+	list_insert_ordered(&ready_list, &t->elem, priority_ready_more, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -363,7 +365,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, priority_more, NULL);
+		list_insert_ordered(&ready_list, &curr->elem, priority_ready_more, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
