@@ -31,6 +31,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+static bool condition_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 /* 세마포어 `SEMA`를 `VALUE`로 초기화한다. 세마포어는
    음수가 아닌 정수 값과, 이를 조작하는 두 개의 원자적 연산으로
    이루어진다.
@@ -280,7 +282,8 @@ void cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_insert_ordered(&cond->waiters, &waiter.elem, thread_priority_less, NULL);
+	waiter.priority = thread_current()->priority;
+	list_insert_ordered(&cond->waiters, &waiter.elem, condition_priority_less, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -292,16 +295,14 @@ void cond_wait (struct condition *cond, struct lock *lock) {
 
    인터럽트 핸들러는 락을 획득할 수 없으므로, 그 안에서
    조건 변수에 신호를 보내려는 시도도 의미가 없다. */
-void
-cond_signal (struct condition *cond, struct lock *lock UNUSED) {
+void cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+		sema_up (&list_entry (list_pop_front (&cond->waiters), struct semaphore_elem, elem)->semaphore);
 }
 
 /* `COND`에서 기다리는 모든 스레드를 깨운다.
@@ -309,8 +310,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 
    인터럽트 핸들러는 락을 획득할 수 없으므로, 그 안에서
    조건 변수에 신호를 보내려는 시도도 의미가 없다. */
-void
-cond_broadcast (struct condition *cond, struct lock *lock) {
+void cond_broadcast (struct condition *cond, struct lock *lock) {
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
 
@@ -318,9 +318,9 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 		cond_signal (cond, lock);
 }
 
-bool condition_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+static bool condition_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
 	struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
-	return sa->priority < sb->priority;
+	return sa->priority > sb->priority;
 }

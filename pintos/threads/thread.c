@@ -65,7 +65,6 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static bool wake_up_less (const struct list_elem *, const struct list_elem *, void *aux);
-static bool thread_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 static void schedule (void);
 
 static tid_t allocate_tid (void);
@@ -363,7 +362,7 @@ thread_set_priority (int new_priority) {
 }
 
 /* thread priority가 더 높은 쪽을 꺼냄 */
-static bool thread_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool thread_priority_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
     struct thread *ta = list_entry(a, struct thread, elem);
     struct thread *tb = list_entry(b, struct thread, elem);
 
