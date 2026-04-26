@@ -207,6 +207,7 @@ thread_create (const char *name, int priority,
 
 	/* 실행 큐에 추가한다. */
 	thread_unblock (t);
+	thread_yield();
 
 	return tid;
 }
@@ -255,12 +256,21 @@ thread_block (void) {
 /* `ta`가 `tb`보다 앞에 오려면 `wakeup_tick`이 더 이르거나,
    같다면 우선순위가 더 높아야 한다.
    같은 tick에 깨는 스레드는 우선순위가 높은 쪽을 먼저 꺼낸다. */
-static bool wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+static bool 
+wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct thread *ta = list_entry(a, struct thread, elem);
 	struct thread *tb = list_entry(b, struct thread, elem);
 
-	if (ta->wakeup_tick != tb->wakeup_tick)
-		return ta->wakeup_tick < tb->wakeup_tick;
+	if (ta->wakeup_tick != 0 && tb->wakeup_tick != 0) {
+
+		if (ta->wakeup_tick != tb->wakeup_tick) {
+			return ta->wakeup_tick < tb->wakeup_tick;
+		} else {
+			return ta->priority > tb->priority;
+		}
+	}	else {
+			return ta->priority > tb->priority;
+	}
 }
 
 /* 블록된 스레드 `T`를 실행 가능한 준비 상태로 바꾼다.
@@ -278,7 +288,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	t->wakeup_tick = 0;
+	list_insert_ordered(&ready_list, &t->elem, wake_up_less, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -340,7 +351,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, wake_up_less, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -349,6 +360,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	thread_yield();
 }
 
 /* 현재 스레드의 우선순위를 반환한다. */
@@ -426,7 +438,6 @@ kernel_thread (thread_func *function, void *aux) {
 	function (aux);       /* 스레드 함수를 실행한다. */
 	thread_exit ();       /* `function()`이 반환하면 스레드를 끝낸다. */
 }
-
 
 /* `T`를 이름 `NAME`을 가진 블록 상태 스레드로 기본 초기화한다. */
 static void
