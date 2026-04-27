@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "list.h"
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -65,6 +66,7 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static bool wake_up_less (const struct list_elem *, const struct list_elem *, void *aux);
+static bool cmp_priority (const struct list_elem *, const struct list_elem *, void *aux);
 static void schedule (void);
 
 static tid_t allocate_tid (void);
@@ -207,34 +209,46 @@ thread_create (const char *name, int priority,
 
 	/* 실행 큐에 추가한다. */
 	thread_unblock (t);
-
+	
+	if (thread_current()->priority < t->priority) {
+		thread_yield();
+	}
 	return tid;
 }
 
 /* `wakeup_tick` 시각이 된 스레드들을 깨운다. */
 void thread_awake(int64_t now) {
-	while  (!(list_empty(&sleep_list))) {
-	struct list_elem *head = list_begin(&sleep_list);
-	struct thread *t = list_entry(head, struct thread, elem);
-	if (t->wakeup_tick > now) 
-		break;
-	 
-	list_pop_front(&sleep_list);
-	thread_unblock(t);
+	bool need_preempt_any = false;
+	struct thread *current = thread_current();
+
+	while (!list_empty(&sleep_list)) {
+		struct list_elem *head = list_begin(&sleep_list);
+		struct thread *t = list_entry(head, struct thread, elem);
+		if (t->wakeup_tick > now) 
+			break;
+		list_pop_front(&sleep_list);
+		thread_unblock(t);
+
+		if (current->priority < t->priority) {
+			need_preempt_any = true;
+		}
+	}
+
+	if (!list_empty(&ready_list) && need_preempt_any) {
+		intr_yield_on_return();
 	}
 }
 
 /* 현재 실행 중인 스레드를 sleep 리스트에 넣고 블록한다. */
-void thread_sleep(int64_t wakeup_tick) {
+void thread_sleep(int64_t ticks) {
 	struct thread *curr = thread_current();
 	enum intr_level old_level;
 
 	old_level = intr_disable();
-	curr->wakeup_tick = wakeup_tick;
+	int64_t start = timer_ticks ();
+	curr->wakeup_tick = start + ticks;
 	list_insert_ordered(&sleep_list, &curr->elem, wake_up_less, NULL);
-
 	thread_block();
-
 	intr_set_level(old_level);
 }
 
@@ -255,12 +269,24 @@ thread_block (void) {
 /* `ta`가 `tb`보다 앞에 오려면 `wakeup_tick`이 더 이르거나,
    같다면 우선순위가 더 높아야 한다.
    같은 tick에 깨는 스레드는 우선순위가 높은 쪽을 먼저 꺼낸다. */
-static bool wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+static bool 
+wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct thread *ta = list_entry(a, struct thread, elem);
 	struct thread *tb = list_entry(b, struct thread, elem);
 
-	if (ta->wakeup_tick != tb->wakeup_tick)
+	if (ta->wakeup_tick != tb->wakeup_tick) {
 		return ta->wakeup_tick < tb->wakeup_tick;
+	} else {
+		return ta->priority > tb->priority;
+	}
+}
+
+static bool 
+cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *ta = list_entry(a, struct thread, elem);
+	struct thread *tb = list_entry(b, struct thread, elem);
+
+	return ta->priority > tb->priority;
 }
 
 /* 블록된 스레드 `T`를 실행 가능한 준비 상태로 바꾼다.
@@ -273,12 +299,11 @@ static bool wake_up_less (const struct list_elem *a, const struct list_elem *b, 
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
-
 	ASSERT (is_thread (t));
-
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	t->wakeup_tick = 0;
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -340,7 +365,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -349,6 +374,13 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	if(!list_empty (&ready_list)){
+		struct list_elem *head_elem = list_begin(&ready_list);
+		struct thread *head_thread = list_entry(head_elem, struct thread, elem);
+		if (thread_current()->priority < head_thread->priority) {
+			thread_yield();
+		}
+	}
 }
 
 /* 현재 스레드의 우선순위를 반환한다. */
@@ -426,7 +458,6 @@ kernel_thread (thread_func *function, void *aux) {
 	function (aux);       /* 스레드 함수를 실행한다. */
 	thread_exit ();       /* `function()`이 반환하면 스레드를 끝낸다. */
 }
-
 
 /* `T`를 이름 `NAME`을 가진 블록 상태 스레드로 기본 초기화한다. */
 static void
