@@ -174,9 +174,28 @@ lock_init (struct lock *lock) {
    하면 인터럽트가 다시 켜진다. */
 void
 lock_acquire (struct lock *lock) {
+
+	/*
+		* lock 요청
+		* lock이 이미 잡혀 있으면 holder 확인
+		* 요청한 스레드와 holder의 우선순위 비교
+		* 요청한 스레드가 더 높으면 holder에게 우선순위 기부
+		* 요청한 스레드는 blocked
+		* holder가 높아진 우선순위로 먼저 실행됨
+		* holder가 lock release
+		* 요청한 스레드가 깨어나 lock 획득
+	*/
+
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
-	ASSERT (!lock_held_by_current_thread (lock));
+
+	struct thread *holder = lock->holder;
+	if (!lock_held_by_current_thread (lock)) {
+		if (holder->priority < thread_current()->priority) {
+			holder->priority = thread_current()->priority;
+
+		}
+	}
 
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
@@ -226,6 +245,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 리스트 원소. */
 	struct semaphore semaphore;         /* 해당 세마포어. */
+	int priority;
 };
 
 /* 조건 변수 `COND`를 초기화한다. 조건 변수는 한 코드 조각이
