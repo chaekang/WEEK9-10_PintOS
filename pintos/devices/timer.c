@@ -90,15 +90,12 @@ timer_elapsed (int64_t then) {
 /* 현재 스레드가 "지금부터 `ticks`만큼 CPU를 받지 않겠다"라고 선언하는 셈이다. */
 void
 timer_sleep (int64_t ticks) { // 지정한 tick 동안 잠든다.
-	int64_t start;
-
 	ASSERT (intr_get_level () == INTR_ON);
 	// `alarm-zero`, `alarm-negative` 테스트를 위해 0 이하는 즉시 반환한다.
 	if (ticks <= 0)
 		return;
-	start = timer_ticks ();
-	// 절대 기상 시각을 기준으로 sleep 목록에 넣고 블록시킨다.
-	thread_sleep (start + ticks);
+	// 상대 tick을 thread_sleep()에 그대로 넘겨 절대 시각은 내부에서 계산한다.
+	thread_sleep (ticks);
 }
 
 
