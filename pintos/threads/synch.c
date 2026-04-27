@@ -43,6 +43,7 @@
 
 static bool wake_up_less(const struct list_elem *, const struct list_elem *, void *aux);
 static bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+static void donate_priority(struct thread *current, struct thread *holder);
 
 void
 sema_init (struct semaphore *sema, unsigned value) {
@@ -208,17 +209,21 @@ lock_acquire (struct lock *lock) {
 
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
+	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct thread *current = thread_current();
 	struct thread *holder = lock->holder;
-	if (!lock_held_by_current_thread (lock)) {
-		if (holder->priority < thread_current()->priority) {
-			holder->priority = thread_current()->priority;
+	if (lock->holder != NULL) {
+		current->wait_on_lock = lock;   // 현재 스레드가 락을 잡고 있다고 기록
 
+		if (holder->priority < current->priority) {
+			donate_priority(current, holder);
 		}
 	}
 
-	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	sema_down(&lock->semaphore);   // 요청 스레드 블락(여기에서 잠듦)
+	current->wait_on_lock = NULL;  // 현재 스레드 끝나서 락에서 나감
+	lock->holder = current;        // 현재 스레드가 락을 잡음
 }
 
 /* `LOCK` 획득을 시도하고, 성공하면 true 아니면 false를 반환한다.
@@ -350,4 +355,9 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+static void donate_priority(struct thread *current, struct thread *holder) {
+	holder->origin_priority = holder->priority;
+	holder->priority = current->priority;
 }

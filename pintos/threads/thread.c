@@ -191,6 +191,8 @@ tid_t thread_create(const char *name, int priority,
 
 	/* 스레드를 초기화한다. */
 	init_thread(t, name, priority);
+	t->origin_priority = priority;
+	t->wait_on_lock = false;
 	tid = t->tid = allocate_tid();
 
 	/* 스케줄되면 `kernel_thread`를 호출하게 한다.
