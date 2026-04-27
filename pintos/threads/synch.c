@@ -44,6 +44,7 @@
 static bool wake_up_less(const struct list_elem *, const struct list_elem *, void *aux);
 static bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 static void donate_priority(struct thread *current, struct thread *holder);
+static void remove_donations(struct lock *lock);
 
 void
 sema_init (struct semaphore *sema, unsigned value) {
@@ -249,10 +250,20 @@ lock_try_acquire (struct lock *lock) {
    해제하려는 시도도 의미가 없다. */
 void
 lock_release (struct lock *lock) {
+
+	/*
+		1. lock holder를 비움
+		2. 이 lock 때문에 받은 기부 제거
+		3. 우선순위 재계산
+		4. sema_up()으로 대기자 하나 깨움
+	*/
+
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
+	remove_donations(lock);
 	lock->holder = NULL;
+
 	sema_up (&lock->semaphore);
 }
 
@@ -357,7 +368,13 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 		cond_signal (cond, lock);
 }
 
+/* 우선순위 기부 */
 static void donate_priority(struct thread *current, struct thread *holder) {
 	holder->origin_priority = holder->priority;
 	holder->priority = current->priority;
+}
+
+/* 우선순위 기부 제거 */
+static void remove_donations(struct lock *lock) {
+	lock->holder->priority = lock->holder->origin_priority;
 }
