@@ -284,6 +284,13 @@ struct semaphore_elem {
 	int priority;
 };
 
+/* donation 요소 하나 */
+struct donoation {
+    struct list_elem elem;       /* 리스트 원소 */
+    struct thread *donor;        /* 스레드 */
+    struct lock *lock;           /* 기다리고 있는 락 */
+};
+
 /* 조건 변수 `COND`를 초기화한다. 조건 변수는 한 코드 조각이
    조건을 신호로 보내고, 협력하는 다른 코드가 그 신호를 받아
    동작하도록 해 준다. */
@@ -370,11 +377,16 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 /* 우선순위 기부 */
 static void donate_priority(struct thread *current, struct thread *holder) {
-	holder->origin_priority = holder->priority;
-	holder->priority = current->priority;
+	if (holder->priority < current->priority) {
+		holder->priority = current->priority;
+	}
+	//list_push_back(&holder->donations, &current->elem);
 }
 
 /* 우선순위 기부 제거 */
 static void remove_donations(struct lock *lock) {
-	lock->holder->priority = lock->holder->origin_priority;
+	if (!list_empty(&lock->semaphore.waiters)) {
+		lock->holder->priority = lock->holder->origin_priority;
+	}
+	//list_pop_front(&lock->holder->donations);
 }

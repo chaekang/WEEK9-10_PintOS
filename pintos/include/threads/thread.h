@@ -90,7 +90,8 @@ struct  thread {
 	int priority;                       /* 우선순위. */
 	int origin_priority;                /* donate 받기 전 우선순위 */
 
-	struct lock *wait_on_lock;                  /* 현재 스레드에서 기다리고 있는 lock */
+	struct lock *wait_on_lock;          /* 현재 스레드에서 기다리고 있는 lock */
+	struct list donations;              /* 우선순위 기부해준 리스트 목록 */
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;
