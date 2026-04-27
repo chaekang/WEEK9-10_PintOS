@@ -66,7 +66,7 @@ static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static bool wake_up_less (const struct list_elem *, const struct list_elem *, void *aux);
-static bool priority_ready_more (const struct list_elem *, const struct list_elem *, void *aux);
+static bool cmp_priority (const struct list_elem *, const struct list_elem *, void *aux);
 static void schedule (void);
 
 static tid_t allocate_tid (void);
@@ -282,7 +282,7 @@ wake_up_less (const struct list_elem *a, const struct list_elem *b, void *aux UN
 }
 
 static bool 
-priority_ready_more (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct thread *ta = list_entry(a, struct thread, elem);
 	struct thread *tb = list_entry(b, struct thread, elem);
 
@@ -303,7 +303,7 @@ thread_unblock (struct thread *t) {
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 	t->wakeup_tick = 0;
-	list_insert_ordered(&ready_list, &t->elem, priority_ready_more, NULL);
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -365,7 +365,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_insert_ordered(&ready_list, &curr->elem, priority_ready_more, NULL);
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -375,7 +375,9 @@ void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 	if(!list_empty (&ready_list)){
-		if (thread_current()->priority < list_entry(list_begin(&ready_list), struct thread, elem)->priority) {
+		struct list_elem *head_elem = list_begin(&ready_list);
+		struct thread *head_thread = list_entry(head_elem, struct thread, elem);
+		if (thread_current()->priority < head_thread->priority) {
 			thread_yield();
 		}
 	}
