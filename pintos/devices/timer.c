@@ -94,7 +94,6 @@ timer_sleep (int64_t ticks) { // 지정한 tick 동안 잠든다.
 	// `alarm-zero`, `alarm-negative` 테스트를 위해 0 이하는 즉시 반환한다.
 	if (ticks <= 0)
 		return;
-	// 상대 tick을 thread_sleep()에 그대로 넘겨 절대 시각은 내부에서 계산한다.
 	thread_sleep (ticks);
 }
 
