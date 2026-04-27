@@ -48,6 +48,14 @@ sema_init (struct semaphore *sema, unsigned value) {
 	list_init (&sema->waiters);
 }
 
+static bool 
+priority_sema_wait_more (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *ta = list_entry(a, struct thread, elem);
+	struct thread *tb = list_entry(b, struct thread, elem);
+
+	return ta->priority > tb->priority;
+}
+
 /* 세마포어에 대한 down 또는 "P" 연산.
    `SEMA` 값이 양수가 될 때까지 기다렸다가 원자적으로 감소시킨다.
 
@@ -63,7 +71,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_sema_wait_more, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -102,15 +110,27 @@ sema_try_down (struct semaphore *sema) {
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
+	struct thread *woken = NULL;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	if (!list_empty (&sema->waiters)){
+		woken = list_entry (list_pop_front (&sema->waiters),
+											struct thread, elem);
+		thread_unblock (woken);
+	}
+
 	sema->value++;
 	intr_set_level (old_level);
+
+	if (woken != NULL && woken->priority > thread_current()->priority ) {
+	if (intr_context()) {
+		intr_yield_on_return();
+	} else {
+		thread_yield();
+	}
+	}
 }
 
 static void sema_test_helper (void *sema_);
