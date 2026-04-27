@@ -40,6 +40,10 @@
 
    - up 또는 "V": 값을 증가시키고, 대기 중인 스레드가 있으면
      하나를 깨운다. */
+
+static bool wake_up_less(const struct list_elem *, const struct list_elem *, void *aux);
+static bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
@@ -63,7 +67,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -106,11 +110,27 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+	bool should_yield = false;
+
+	struct thread *cur = thread_current();
+	if (!list_empty (&sema->waiters)) {
+		struct thread *waiter = list_entry(list_pop_front(&sema->waiters),
+										   struct thread, elem);
+		thread_unblock(waiter);
+		if (cur->priority < waiter->priority) {
+			if (intr_context()) {
+				intr_yield_on_return();
+			} else {
+				should_yield = true;
+			}
+		}
+	}
 	sema->value++;
-	intr_set_level (old_level);
+	intr_set_level(old_level);
+
+	if (should_yield) {
+		thread_yield();
+	}
 }
 
 static void sema_test_helper (void *sema_);
@@ -257,25 +277,35 @@ cond_init (struct condition *cond) {
 
 	list_init (&cond->waiters);
 }
+/* cond 정렬 비교함수
+*/
+bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+	struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
-/* `LOCK`를 원자적으로 해제하고, 다른 코드가 `COND`를 신호할 때까지
-   기다린다. `COND`가 신호되면 반환하기 전에 `LOCK`를 다시 획득한다.
-   이 함수를 호출하기 전에는 반드시 `LOCK`를 보유하고 있어야 한다.
+	return sa->priority > sb->priority;
 
-   이 함수가 구현하는 모니터는 "Hoare" 스타일이 아니라 "Mesa"
-   스타일이다. 즉, 신호를 보내는 것과 받는 것은 원자적 연산이 아니다.
-   따라서 보통은 대기가 끝난 뒤 조건을 다시 확인하고, 필요하면
-   다시 기다려야 한다.
+}
 
-   하나의 조건 변수는 하나의 락에만 연결되지만, 하나의 락은
-   여러 조건 변수와 연결될 수 있다. 즉 락에서 조건 변수로는
-   일대다 관계다.
+	/* `LOCK`를 원자적으로 해제하고, 다른 코드가 `COND`를 신호할 때까지
+	   기다린다. `COND`가 신호되면 반환하기 전에 `LOCK`를 다시 획득한다.
+	   이 함수를 호출하기 전에는 반드시 `LOCK`를 보유하고 있어야 한다.
 
-   이 함수는 잠들 수 있으므로 인터럽트 핸들러 안에서 호출하면
-   안 된다. 인터럽트를 끈 상태에서 호출할 수는 있지만, 잠들어야
-   하면 인터럽트가 다시 켜진다. */
+	   이 함수가 구현하는 모니터는 "Hoare" 스타일이 아니라 "Mesa"
+	   스타일이다. 즉, 신호를 보내는 것과 받는 것은 원자적 연산이 아니다.
+	   따라서 보통은 대기가 끝난 뒤 조건을 다시 확인하고, 필요하면
+	   다시 기다려야 한다.
+
+	   하나의 조건 변수는 하나의 락에만 연결되지만, 하나의 락은
+	   여러 조건 변수와 연결될 수 있다. 즉 락에서 조건 변수로는
+	   일대다 관계다.
+
+	   이 함수는 잠들 수 있으므로 인터럽트 핸들러 안에서 호출하면
+	   안 된다. 인터럽트를 끈 상태에서 호출할 수는 있지만, 잠들어야
+	   하면 인터럽트가 다시 켜진다. */
 void
-cond_wait (struct condition *cond, struct lock *lock) {
+cond_wait(struct condition *cond, struct lock *lock)
+{
 	struct semaphore_elem waiter;
 
 	ASSERT (cond != NULL);
@@ -283,11 +313,12 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
-	lock_release (lock);
+	sema_init(&waiter.semaphore, 0);
+	waiter.priority = thread_current()->priority;
+	list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sema_priority, NULL);
+	lock_release(lock); // sema_down으로 잠들기 전에 락을 풀어줘야 다른 스레드가 락을 잡아 실행할 수 있음?
 	sema_down (&waiter.semaphore);
-	lock_acquire (lock);
+	lock_acquire(lock); // signal을 받고 깨어나면 wait()가 리턴하기 전에 lock을 다시 잡는다.
 }
 
 /* `COND`에서 기다리는 스레드가 하나라도 있으면,
@@ -303,9 +334,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+	if (!list_empty(&cond->waiters))
+		sema_up(&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
 }
 
 /* `COND`에서 기다리는 모든 스레드를 깨운다.
