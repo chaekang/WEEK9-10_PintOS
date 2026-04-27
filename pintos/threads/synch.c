@@ -196,18 +196,6 @@ lock_init (struct lock *lock) {
    하면 인터럽트가 다시 켜진다. */
 void
 lock_acquire (struct lock *lock) {
-
-	/*
-		* lock 요청
-		* lock이 이미 잡혀 있으면 holder 확인
-		* 요청한 스레드와 holder의 우선순위 비교
-		* 요청한 스레드가 더 높으면 holder에게 우선순위 기부
-		* 요청한 스레드는 blocked
-		* holder가 높아진 우선순위로 먼저 실행됨
-		* holder가 lock release
-		* 요청한 스레드가 깨어나 lock 획득
-	*/
-
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
@@ -377,10 +365,23 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 /* 우선순위 기부 */
 static void donate_priority(struct thread *current, struct thread *holder) {
-	if (holder->priority < current->priority) {
-		holder->priority = current->priority;
+	int donated_priority = current->priority;
+	struct thread *lock = current->wait_on_lock;
+
+	while (lock != NULL) {
+		if (holder == NULL) {
+			break;
+		}
+
+		if (holder->priority < current->priority) {
+			holder->priority = current->priority;
+		}
+		else {
+			break;
+		}
+
+		lock = holder->wait_on_lock;
 	}
-	//list_push_back(&holder->donations, &current->elem);
 }
 
 /* 우선순위 기부 제거 */
