@@ -40,6 +40,9 @@
 
    - up 또는 "V": 값을 증가시키고, 대기 중인 스레드가 있으면
      하나를 깨운다. */
+
+static bool wake_up_less(const struct list_elem *, const struct list_elem *, void *aux);
+
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
@@ -71,7 +74,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_sema_wait_more, NULL);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL);
+
 		thread_block ();
 	}
 	sema->value--;
@@ -115,21 +119,26 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters)){
-		woken = list_entry (list_pop_front (&sema->waiters),
-											struct thread, elem);
-		thread_unblock (woken);
-	}
+	bool should_yield = false;
 
+	struct thread *cur = thread_current();
+	if (!list_empty (&sema->waiters)) {
+		struct thread *waiter = list_entry(list_pop_front(&sema->waiters),
+										   struct thread, elem);
+		thread_unblock(waiter);
+		if (cur->priority < waiter->priority) {
+			if (intr_context()) {
+				intr_yield_on_return();
+			} else {
+				should_yield = true;
+			}
+		}
+	}
 	sema->value++;
-	intr_set_level (old_level);
+	intr_set_level(old_level);
 
-	if (woken != NULL && woken->priority > thread_current()->priority ) {
-	if (intr_context()) {
-		intr_yield_on_return();
-	} else {
+	if (should_yield) {
 		thread_yield();
-	}
 	}
 }
 

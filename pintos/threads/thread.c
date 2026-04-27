@@ -209,7 +209,7 @@ thread_create (const char *name, int priority,
 
 	/* 실행 큐에 추가한다. */
 	thread_unblock (t);
-	
+
 	if (thread_current()->priority < t->priority) {
 		thread_yield();
 	}
@@ -289,6 +289,14 @@ cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UN
 	return ta->priority > tb->priority;
 }
 
+bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *ta = list_entry(a, struct thread, elem);
+	struct thread *tb = list_entry(b, struct thread, elem);
+
+	return ta->priority > tb->priority;
+}
+
 /* 블록된 스레드 `T`를 실행 가능한 준비 상태로 바꾼다.
    `T`가 블록 상태가 아니면 오류다. (실행 중인 스레드를 준비 상태로
    만들려면 `thread_yield()`를 써라.)
@@ -302,6 +310,7 @@ thread_unblock (struct thread *t) {
 	ASSERT (is_thread (t));
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
+
 	t->wakeup_tick = 0;
 	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
