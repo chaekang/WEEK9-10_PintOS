@@ -49,7 +49,7 @@ sema_init (struct semaphore *sema, unsigned value) {
 }
 
 static bool 
-priority_sema_wait_more (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+cmp_sema_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct thread *ta = list_entry(a, struct thread, elem);
 	struct thread *tb = list_entry(b, struct thread, elem);
 
@@ -71,7 +71,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters, &thread_current ()->elem, priority_sema_wait_more, NULL);
+		list_insert_ordered(&sema->waiters, &thread_current ()->elem, cmp_sema_priority, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -125,11 +125,11 @@ sema_up (struct semaphore *sema) {
 	intr_set_level (old_level);
 
 	if (woken != NULL && woken->priority > thread_current()->priority ) {
-	if (intr_context()) {
-		intr_yield_on_return();
-	} else {
-		thread_yield();
-	}
+		if (intr_context()) {
+			intr_yield_on_return();
+		} else {
+			thread_yield();
+		}
 	}
 }
 
