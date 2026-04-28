@@ -44,7 +44,8 @@
 static bool wake_up_less(const struct list_elem *, const struct list_elem *, void *aux);
 static bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 static void donate_priority(struct thread *current);
-static void remove_donations(struct lock *lock);
+static void remove_donations(struct thread *current, struct lock *lock);
+static void refresh_priority(struct thread *current);
 static bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void
@@ -204,11 +205,9 @@ lock_acquire (struct lock *lock) {
 	struct thread *current = thread_current();
 	struct thread *holder = lock->holder;
 	if (lock->holder != NULL) {
+		current->wait_on_lock = lock;
 		list_insert_ordered(&holder->donations, &current->donation_elem, cmp_donation_priority, NULL);
-
-		if (holder->priority < current->priority) {
-			donate_priority(current);
-		}
+		donate_priority(current);
 	}
 
 	sema_down(&lock->semaphore);   // 요청 스레드 블락(여기에서 잠듦)
@@ -242,7 +241,8 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
-	remove_donations(lock);
+	remove_donations(thread_current(), lock);
+	refresh_priority(thread_current());
 	lock->holder = NULL;
 
 	sema_up (&lock->semaphore);
@@ -359,29 +359,50 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 /* 우선순위 기부 */
 static void donate_priority(struct thread *current) {
 	int depth = 0;
-	struct lock *lock = current->wait_on_lock;
-	struct thread *holder = lock->holder;
 
-	while (lock != NULL && depth < 8) {
+	while (current->wait_on_lock != NULL && depth < 8) {
+		struct thread *holder = current->wait_on_lock->holder;
+
 		if (holder == NULL) {
 			break;
 		}
 
-		if (holder->priority < current->priority) {
-			holder->priority = current->priority;
-			current = holder;
-			depth++;
-		}
-		else {
+		if (holder->priority >= current->priority) {
 			break;
 		}
+
+		holder->priority = current->priority;
+		current = holder;
+		depth++;
 	}
 }
 
 /* 우선순위 기부 제거 */
-static void remove_donations(struct lock *lock) {
-	if (!list_empty(&lock->semaphore.waiters)) {
-		lock->holder->priority = lock->holder->origin_priority;
+static void remove_donations(struct thread *current, struct lock *lock) {
+	struct list_elem *le = list_begin(&current->donations);
+
+
+	while (le != list_end(&current->donations)) {
+		struct thread *donor = list_entry(le, struct thread, donation_elem);
+		struct list_elem *next = list_next(le);
+
+		if (donor->wait_on_lock == lock) {
+			list_remove(le);
+		}
+		le = next;
 	}
-	//list_pop_front(&lock->holder->donations);
+}
+
+/* 우선순위 초기화 */
+static void refresh_priority(struct thread *current) {
+	current->priority = current->origin_priority;
+
+	if (!list_empty(&current->donations)) {
+		list_sort(&current->donations, cmp_donation_priority, NULL);
+		struct thread *donor = list_entry(list_front(&current->donations), struct thread, donation_elem);
+
+		if (current->priority < donor->priority) {
+			current->priority = donor->priority;
+		}
+	}
 }
