@@ -374,6 +374,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	thread_current ()->origin_priority = new_priority;
 	if(!list_empty (&ready_list)){
 		struct list_elem *head_elem = list_begin(&ready_list);
 		struct thread *head_thread = list_entry(head_elem, struct thread, elem);
@@ -471,6 +472,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	t->origin_priority = priority;
 	t->magic = THREAD_MAGIC;
 }
 
