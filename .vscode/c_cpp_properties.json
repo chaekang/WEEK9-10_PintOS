@@ -1,0 +1,38 @@
+{
+  "configurations": [
+    {
+      "name": "Pintos",
+      "compilerPath": "/usr/bin/gcc",
+      "intelliSenseMode": "linux-gcc-x64",
+      "cStandard": "gnu99",
+      "compilerArgs": [
+        "-nostdinc",
+        "-msoft-float",
+        "-fno-omit-frame-pointer",
+        "-mno-red-zone",
+        "-mcmodel=large",
+        "-fno-plt",
+        "-fno-pic",
+        "-mno-sse"
+      ],
+      "includePath": [
+        "${workspaceFolder}/pintos",
+        "${workspaceFolder}/pintos/include",
+        "${workspaceFolder}/pintos/include/lib",
+        "${workspaceFolder}/pintos/include/lib/kernel",
+        "${workspaceFolder}/pintos/lib/kernel"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}/pintos",
+          "${workspaceFolder}/pintos/include",
+          "${workspaceFolder}/pintos/include/lib",
+          "${workspaceFolder}/pintos/include/lib/kernel",
+          "${workspaceFolder}/pintos/lib/kernel"
+        ],
+        "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db"
+      }
+    }
+  ],
+  "version": 4
+}

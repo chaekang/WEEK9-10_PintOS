@@ -192,6 +192,10 @@ tid_t thread_create(const char *name, int priority,
 	/* 스레드를 초기화한다. */
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
+	t->priority = priority;
+	t->init_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 
 	/* 스케줄되면 `kernel_thread`를 호출하게 한다.
 	 * 참고로 `rdi`는 첫 번째 인자, `rsi`는 두 번째 인자다. */
@@ -382,7 +386,8 @@ void thread_yield(void)
 /* 현재 스레드의 우선순위를 `NEW_PRIORITY`로 설정한다. */
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+	thread_current()->init_priority = new_priority;
+	substitute_priority(thread_current());
 	if (!list_empty(&ready_list))
 	{
 		struct list_elem *head_elem = list_begin(&ready_list);
@@ -398,6 +403,12 @@ void thread_set_priority(int new_priority)
 int thread_get_priority(void)
 {
 	return thread_current()->priority;
+}
+
+/* 현재 priority를 초기화하고, 일시적으로 donations 중 가장 높은 것으로 교체 */ // aquire_lock에서 사용
+void substitute_priority(struct thread *t) {
+	thread_set_priority(t->init_priority);
+	thread_set_priority(max(t->donations));
 }
 
 /* 현재 스레드의 nice 값을 `NICE`로 설정한다. */

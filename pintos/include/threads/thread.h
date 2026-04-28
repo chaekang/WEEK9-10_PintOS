@@ -88,6 +88,10 @@ struct thread {
 	enum thread_status status;          /* 스레드 상태. */
 	char name[16];                      /* 이름(디버깅용). */
 	int priority;                       /* 우선순위. */
+	int init_priority;
+	struct lock *wait_on_lock;
+	struct list *donations;
+	struct list_elem *donation_elem;
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;

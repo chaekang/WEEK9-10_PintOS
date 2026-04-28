@@ -1,0 +1,32 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.autocomplete": "default",
+  "C_Cpp.errorSquiggles": "enabled",
+  "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+  "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+  "C_Cpp.default.cStandard": "gnu99",
+  "C_Cpp.default.compilerArgs": [
+    "-nostdinc",
+    "-msoft-float",
+    "-fno-omit-frame-pointer",
+    "-mno-red-zone",
+    "-mcmodel=large",
+    "-fno-plt",
+    "-fno-pic",
+    "-mno-sse"
+  ],
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}",
+    "${workspaceFolder}/include",
+    "${workspaceFolder}/include/lib",
+    "${workspaceFolder}/include/lib/kernel",
+    "${workspaceFolder}/lib/kernel"
+  ],
+  "C_Cpp.default.browse.path": [
+    "${workspaceFolder}",
+    "${workspaceFolder}/include",
+    "${workspaceFolder}/include/lib",
+    "${workspaceFolder}/include/lib/kernel",
+    "${workspaceFolder}/lib/kernel"
+  ]
+}
