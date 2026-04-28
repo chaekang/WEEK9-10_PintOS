@@ -114,6 +114,7 @@ sema_up (struct semaphore *sema) {
 
 	struct thread *cur = thread_current();
 	if (!list_empty (&sema->waiters)) {
+		list_sort(&sema->waiters, cmp_priority, NULL);
 		struct thread *waiter = list_entry(list_pop_front(&sema->waiters),
 										   struct thread, elem);
 		thread_unblock(waiter);
