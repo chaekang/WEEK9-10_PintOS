@@ -151,7 +151,8 @@ bool cmp_priority(const struct list_elem *a,
 				  void *aux);
 bool cmp_donation_priority(const struct list_elem *a, 
 						   const struct list_elem *b, 
-						   void *aux UNUSED)
+						   void *aux UNUSED);
+void substitute_priority(struct thread *t);
 
 
 void do_iret (struct intr_frame *tf);

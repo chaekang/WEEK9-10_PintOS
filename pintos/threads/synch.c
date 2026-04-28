@@ -67,7 +67,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_donation_priority, NULL);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -201,7 +201,7 @@ lock_acquire (struct lock *lock) {
 
 	if (lock->holder != NULL) {// value가 1?: sema_down에게 맡기기
 		thread_current()->wait_on_lock = lock;
-		list_insert_ordered(&lock->holder->donations, &thread_current()->donation_elem, /* donation 비교 함수 */, NULL);
+		list_insert_ordered(&lock->holder->donations, &thread_current()->donation_elem, cmp_donation_priority, NULL);
 		substitute_priority(lock->holder);
 	}
 	sema_down(&lock->semaphore); // holder == NULL 일 때는 여기서 처리

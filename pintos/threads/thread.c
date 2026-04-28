@@ -192,10 +192,6 @@ tid_t thread_create(const char *name, int priority,
 	/* 스레드를 초기화한다. */
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
-	t->priority = priority;
-	t->init_priority = priority;
-	t->wait_on_lock = NULL;
-	list_init(&t->donations);
 
 	/* 스케줄되면 `kernel_thread`를 호출하게 한다.
 	 * 참고로 `rdi`는 첫 번째 인자, `rsi`는 두 번째 인자다. */
@@ -525,6 +521,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	strlcpy(t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
+	t->init_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
 }
 
