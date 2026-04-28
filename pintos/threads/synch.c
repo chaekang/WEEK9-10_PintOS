@@ -246,7 +246,16 @@ lock_held_by_current_thread (const struct lock *lock) {
 struct semaphore_elem {
 	struct list_elem elem;              /* 리스트 원소. */
 	struct semaphore semaphore;         /* 해당 세마포어. */
+	int priority;				/* 기다리는 스레드의 priority */
 };
+
+static bool 
+cmp_condvar_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+	struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+
+	return sa->priority > sb->priority;
+}
 
 /* 조건 변수 `COND`를 초기화한다. 조건 변수는 한 코드 조각이
    조건을 신호로 보내고, 협력하는 다른 코드가 그 신호를 받아
@@ -284,7 +293,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	waiter.priority = thread_current()->priority;
+	list_insert_ordered(&cond->waiters, &waiter.elem, cmp_condvar_priority, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
