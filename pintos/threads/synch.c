@@ -43,8 +43,9 @@
 
 static bool wake_up_less(const struct list_elem *, const struct list_elem *, void *aux);
 static bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-static void donate_priority(struct thread *current, struct thread *holder);
+static void donate_priority(struct thread *current);
 static void remove_donations(struct lock *lock);
+static bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void
 sema_init (struct semaphore *sema, unsigned value) {
@@ -203,10 +204,10 @@ lock_acquire (struct lock *lock) {
 	struct thread *current = thread_current();
 	struct thread *holder = lock->holder;
 	if (lock->holder != NULL) {
-		current->wait_on_lock = lock;   // 현재 스레드가 락을 잡고 있다고 기록
+		list_insert_ordered(&holder->donations, &current->donation_elem, cmp_donation_priority, NULL);
 
 		if (holder->priority < current->priority) {
-			donate_priority(current, holder);
+			donate_priority(current);
 		}
 	}
 
@@ -238,14 +239,6 @@ lock_try_acquire (struct lock *lock) {
    해제하려는 시도도 의미가 없다. */
 void
 lock_release (struct lock *lock) {
-
-	/*
-		1. lock holder를 비움
-		2. 이 lock 때문에 받은 기부 제거
-		3. 우선순위 재계산
-		4. sema_up()으로 대기자 하나 깨움
-	*/
-
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
@@ -272,13 +265,6 @@ struct semaphore_elem {
 	int priority;
 };
 
-/* donation 요소 하나 */
-struct donoation {
-    struct list_elem elem;       /* 리스트 원소 */
-    struct thread *donor;        /* 스레드 */
-    struct lock *lock;           /* 기다리고 있는 락 */
-};
-
 /* 조건 변수 `COND`를 초기화한다. 조건 변수는 한 코드 조각이
    조건을 신호로 보내고, 협력하는 다른 코드가 그 신호를 받아
    동작하도록 해 준다. */
@@ -295,7 +281,14 @@ bool cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, voi
 	struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
 	return sa->priority > sb->priority;
+}
 
+/* donation 정렬 비교함수 */
+static bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	struct thread *da = list_entry(a, struct thread, donation_elem);
+	struct thread *db = list_entry(b, struct thread, donation_elem);
+
+	return da->priority > db->priority;
 }
 
 	/* `LOCK`를 원자적으로 해제하고, 다른 코드가 `COND`를 신호할 때까지
@@ -364,23 +357,24 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 }
 
 /* 우선순위 기부 */
-static void donate_priority(struct thread *current, struct thread *holder) {
-	int donated_priority = current->priority;
-	struct thread *lock = current->wait_on_lock;
+static void donate_priority(struct thread *current) {
+	int depth = 0;
+	struct lock *lock = current->wait_on_lock;
+	struct thread *holder = lock->holder;
 
-	while (lock != NULL) {
+	while (lock != NULL && depth < 8) {
 		if (holder == NULL) {
 			break;
 		}
 
 		if (holder->priority < current->priority) {
 			holder->priority = current->priority;
+			current = holder;
+			depth++;
 		}
 		else {
 			break;
 		}
-
-		lock = holder->wait_on_lock;
 	}
 }
 
