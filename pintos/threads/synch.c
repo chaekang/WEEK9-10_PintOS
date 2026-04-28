@@ -118,6 +118,7 @@ sema_up (struct semaphore *sema) {
 
 	struct thread *cur = thread_current();
 	if (!list_empty (&sema->waiters)) {
+		list_sort(&sema->waiters, cmp_priority, NULL);
 		struct thread *waiter = list_entry(list_pop_front(&sema->waiters),
 										   struct thread, elem);
 		thread_unblock(waiter);
@@ -380,7 +381,6 @@ static void donate_priority(struct thread *current) {
 /* 우선순위 기부 제거 */
 static void remove_donations(struct thread *current, struct lock *lock) {
 	struct list_elem *le = list_begin(&current->donations);
-
 
 	while (le != list_end(&current->donations)) {
 		struct thread *donor = list_entry(le, struct thread, donation_elem);
