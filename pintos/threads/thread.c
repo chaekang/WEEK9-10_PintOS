@@ -299,6 +299,14 @@ bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *au
 	return ta->priority > tb->priority;
 }
 
+bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *ta = list_entry(a, struct thread, donation_elem);
+	struct thread *tb = list_entry(b, struct thread, donation_elem);
+
+	return ta->priority > tb->priority;
+}
+
 /* 블록된 스레드 `T`를 실행 가능한 준비 상태로 바꾼다.
    `T`가 블록 상태가 아니면 오류다. (실행 중인 스레드를 준비 상태로
    만들려면 `thread_yield()`를 써라.)
@@ -383,18 +391,21 @@ void thread_yield(void)
 	intr_set_level(old_level);
 }
 
-/* 현재 스레드의 우선순위를 `NEW_PRIORITY`로 설정한다. */
+/* base priority를 new_priority로 바꾸고, donation을 반영해 effective priority를 갱신한다. */
 void thread_set_priority(int new_priority)
 {
 	thread_current()->init_priority = new_priority;
+	if (!list_empty(&ready_list)) {
+	
+	/* 현재 thread의 effective priority를 다시 계산한다. */
 	substitute_priority(thread_current());
-	if (!list_empty(&ready_list))
-	{
-		struct list_elem *head_elem = list_begin(&ready_list);
-		struct thread *head_thread = list_entry(head_elem, struct thread, elem);
-		if (thread_current()->priority < head_thread->priority)
-		{
-			thread_yield();
+
+
+	/* 현재 priority가 ready_list의 head priority 보다 작으면 yield 한다.*/
+	struct list_elem *head_elem = list_begin(&ready_list);
+	struct thread *head_thread = list_entry(head_elem, struct thread, elem);
+	if (thread_current()->priority < head_thread->priority) {
+		thread_yield();
 		}
 	}
 }
@@ -405,10 +416,27 @@ int thread_get_priority(void)
 	return thread_current()->priority;
 }
 
-/* 현재 priority를 초기화하고, 일시적으로 donations 중 가장 높은 것으로 교체 */ // aquire_lock에서 사용
-void substitute_priority(struct thread *t) {
-	thread_set_priority(t->init_priority);
-	thread_set_priority(max(t->donations));
+/* thread t의 init_priority를 초기화하고, effective priority를 다시 계산한다. */ // aquire_lock에서 사용
+void substitute_priority(struct thread *t) { // t 말고 다른 것으로
+
+	t->priority = t->init_priority; // 초기화 먼저 하는 이유: 기존 max_priority 남아있을 수 있음.
+	
+	/* donations가 비었으면 종료 */
+	if (list_empty(&t->donations)) {
+		return;
+	}
+	
+	struct list_elem *e;
+	int max_priority = t->init_priority;
+	
+	for (e = list_begin(&t->donations); e != list_end(&t->donations); e = list_next(e)) {
+		struct thread *donor = list_entry(e, struct thread, donation_elem);
+		if (donor->priority > max_priority) {
+			max_priority = donor->priority;
+		}
+	}
+	t->priority = max_priority;
+		
 }
 
 /* 현재 스레드의 nice 값을 `NICE`로 설정한다. */

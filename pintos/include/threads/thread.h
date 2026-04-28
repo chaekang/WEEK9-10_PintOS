@@ -90,8 +90,8 @@ struct thread {
 	int priority;                       /* 우선순위. */
 	int init_priority;
 	struct lock *wait_on_lock;
-	struct list *donations;
-	struct list_elem *donation_elem;
+	struct list donations;
+	struct list_elem donation_elem;
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;
@@ -149,6 +149,10 @@ int thread_get_load_avg (void);
 bool cmp_priority(const struct list_elem *a,
 				  const struct list_elem *b,
 				  void *aux);
+bool cmp_donation_priority(const struct list_elem *a, 
+						   const struct list_elem *b, 
+						   void *aux UNUSED)
+
 
 void do_iret (struct intr_frame *tf);
 

@@ -67,7 +67,7 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL);
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_donation_priority, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -198,8 +198,15 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
-	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	if (lock->holder != NULL) {// value가 1?: sema_down에게 맡기기
+		thread_current()->wait_on_lock = lock;
+		list_insert_ordered(&lock->holder->donations, &thread_current()->donation_elem, /* donation 비교 함수 */, NULL);
+		substitute_priority(lock->holder);
+	}
+	sema_down(&lock->semaphore); // holder == NULL 일 때는 여기서 처리
+
+	thread_current()->wait_on_lock = NULL;
+	lock->holder = thread_current();
 }
 
 /* `LOCK` 획득을 시도하고, 성공하면 true 아니면 false를 반환한다.
@@ -225,8 +232,25 @@ lock_try_acquire (struct lock *lock) {
    해제하려는 시도도 의미가 없다. */
 void
 lock_release (struct lock *lock) {
+	struct thread *curr = thread_current();
+	
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+
+	struct list_elem *e = list_begin(&curr->donations);
+
+	while (e != list_tail(&curr->donations)) {
+		struct thread *donor = list_entry(e, struct thread, donation_elem);
+
+		if (donor->wait_on_lock == lock) {
+			e = list_remove(e);
+		}
+		else {
+			e = list_next(e);
+		}	
+	}
+
+	substitute_priority(curr);
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
