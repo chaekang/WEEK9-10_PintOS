@@ -82,12 +82,17 @@ typedef int tid_t;
  * 원소가 될 수도 있다. 이 두 용도가 동시에 겹치지 않는 이유는
  * 준비 상태의 스레드만 실행 큐에 있고, 블록 상태의 스레드만
  * 세마포어 대기 리스트에 있기 때문이다. */
-struct thread {
+struct  thread {
 	/* `thread.c`가 관리한다. */
 	tid_t tid;                          /* 스레드 식별자. */
 	enum thread_status status;          /* 스레드 상태. */
 	char name[16];                      /* 이름(디버깅용). */
 	int priority;                       /* 우선순위. */
+	int origin_priority;                /* donate 받기 전 우선순위 */
+
+	struct lock *wait_on_lock;          /* 현재 스레드에서 기다리고 있는 lock */
+	struct list donations;              /* 우선순위 기부해준 리스트 목록 */
+	struct list_elem donation_elem;    /* 타 스레드 donation 리스트의 원소 */
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;

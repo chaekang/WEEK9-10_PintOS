@@ -382,12 +382,20 @@ void thread_yield(void)
 /* 현재 스레드의 우선순위를 `NEW_PRIORITY`로 설정한다. */
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+	struct thread *current = thread_current();
+	bool isdonating = current->priority > current->origin_priority;
+
+	current->origin_priority = new_priority;
+	if (!isdonating)
+	{
+		current->priority = new_priority;
+	}
+
 	if (!list_empty(&ready_list))
 	{
 		struct list_elem *head_elem = list_begin(&ready_list);
 		struct thread *head_thread = list_entry(head_elem, struct thread, elem);
-		if (thread_current()->priority < head_thread->priority)
+		if (current->priority < head_thread->priority)
 		{
 			thread_yield();
 		}
@@ -486,6 +494,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	strlcpy(t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
+	t->origin_priority = priority;
+	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
 }
 
