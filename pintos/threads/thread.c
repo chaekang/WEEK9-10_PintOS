@@ -58,6 +58,7 @@ static unsigned thread_ticks; /* 마지막 양보 이후 경과한 타이머 tic
    true면 다단계 피드백 큐 스케줄러를 사용한다.
    커널 명령줄 옵션 `-o mlfqs`로 제어한다. */
 bool thread_mlfqs;
+int load_avg;     /* 실행 준비가 된 스레드 수의 이동 평균 */
 
 static void kernel_thread(thread_func *, void *aux);
 
@@ -71,6 +72,8 @@ static void schedule(void);
 static tid_t allocate_tid(void);
 
 static void update_priority(struct thread *current);
+static void update_recent_cpu(struct thread *current);
+static void update_load_avg(void);
 
 /* `T`가 유효한 스레드를 가리키는 것처럼 보이면 true를 반환한다. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -152,6 +155,21 @@ void thread_tick(void)
 #endif
 	else
 		kernel_ticks++;
+
+	if (thread_mlfqs) {
+		if (t != idle_thread) {
+			t->recent_cpu = FP_ADD_INT(t->recent_cpu, 1);
+		}
+
+		if (timer_ticks() % TIMER_FREQ == 0) {
+			update_load_avg();
+			update_recent_cpu(t);   // TODO 전체 갱신으로 수정 필요
+		}
+
+		if (timer_ticks() % 4 == 0) {
+			update_priority(t);     // TODO 전체 갱신으로 수정 필요
+		}
+	}
 
 	/* 선점을 강제한다. */
 	if (++thread_ticks >= TIME_SLICE)
@@ -421,6 +439,7 @@ void thread_set_nice(int nice)
 	update_priority(current);
 
 	if (!list_empty(&ready_list)) {
+		list_sort(&ready_list, cmp_priority, NULL);
 		struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
 
 		if (t->priority > current->priority) {
@@ -471,8 +490,22 @@ static void update_priority(struct thread *current) {
 	else if (priority > PRI_MAX) {
 		priority = PRI_MAX;
 	}
-
 	current->priority = priority;
+}
+
+static void update_recent_cpu(struct thread *current) {
+	int coef = FP_DIV(FP_MUL_INT(load_avg, 2), FP_ADD_INT(FP_MUL_INT(load_avg, 2), 1));
+	current->recent_cpu = FP_ADD_INT(FP_MUL(coef, current->recent_cpu), current->nice);
+}
+
+static void update_load_avg(void) {
+	int ready_threads = list_size(&ready_list);
+
+	if (thread_current() != idle_thread) {
+		ready_threads++;
+	}
+
+	load_avg = FP_ADD(FP_MUL(FP_DIV_INT(INT_TO_FP(59), 60), load_avg), FP_MUL_INT(FP_DIV_INT(INT_TO_FP(1), 60), ready_threads));
 }
 
 /* idle 스레드. 다른 어떤 스레드도 실행 준비가 안 되었을 때 실행된다.
@@ -537,6 +570,11 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->origin_priority = priority;
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
+
+	t->nice = 0;
+	t->recent_cpu = 0;
+	/* TODO 부모 스레드 상속 후 priority 값 갱신 */
+
 	t->magic = THREAD_MAGIC;
 }
 

@@ -132,8 +132,6 @@ struct  thread {
 #define FP_DIV(x, y) ((int64_t)(x) * F / (y))   /* x를 y로 나누기 */
 #define FP_DIV_INT(x, n) ((x) / (n))            /* x를 n으로 나누기 */
 
-static int load_avg;     /* 실행 준비가 된 스레드 수의 이동 평균 */
-
 /* false(기본값)면 라운드 로빈 스케줄러를 사용한다.
    true면 다단계 피드백 큐 스케줄러를 사용한다.
    커널 명령줄 옵션 `-o mlfqs`로 제어한다. */
