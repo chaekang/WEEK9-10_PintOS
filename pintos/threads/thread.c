@@ -425,7 +425,28 @@ int thread_get_nice(void)
 int thread_get_load_avg(void)
 {
 	/* TODO: 여기에 구현이 들어가야 한다. */
-	return 0;
+
+	/*
+		주의 사항
+		* 현재 load_avg * 100을 가장 가까운 정수로 반올림해서 반환
+		* load_avg 갱신해야 함
+		* 1초마다 틱을 갱신해야 함
+		* ready_threads = 실행 중인 스레드 + ready_list
+		* idle 스레드를 포함하면 안됨
+	*/
+
+	/*
+		* load_avg 갱신
+		* recent_cpu 갱신
+		* priority 갱신
+		* return load_avg
+	*/
+
+	enum intr_level old_level = intr_disable();
+	int value = FP_TO_INT_ROUND(FP_MUL_INT(load_avg, 100));
+	intr_set_level(old_level);
+
+	return value;
 }
 
 /* 현재 스레드 recent_cpu 값의 100배를 반환한다. */
