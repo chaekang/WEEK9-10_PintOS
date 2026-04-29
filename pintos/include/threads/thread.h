@@ -88,12 +88,16 @@ struct thread {
 	enum thread_status status;          /* 스레드 상태. */
 	char name[16];                      /* 이름(디버깅용). */
 	int priority;                       /* 우선순위. */
+	int origin_priority;				/* 원래 우선순위 */
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;
 
 	/* `thread.c`와 `synch.c`가 함께 사용한다. */
 	struct list_elem elem;              /* 리스트 원소. */
+
+	struct lock *waiting_lock;
+	struct list donations;
 
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
@@ -108,6 +112,7 @@ struct thread {
 	struct intr_frame tf;               /* 문맥 전환용 정보. */
 	unsigned magic;                     /* 스택 오버플로를 감지한다. */
 };
+
 
 /* false(기본값)면 라운드 로빈 스케줄러를 사용한다.
    true면 다단계 피드백 큐 스케줄러를 사용한다.

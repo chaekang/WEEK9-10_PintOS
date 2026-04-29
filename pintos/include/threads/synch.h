@@ -22,11 +22,20 @@ struct lock {
 	struct semaphore semaphore; /* 접근을 제어하는 이진 세마포어. */
 };
 
+struct donation {
+	struct list_elem elem;
+	struct thread *donor;
+	struct lock *lock;
+};
+
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
+
+void donate_priority(struct thread *t);
+void remove_donations_by_lock(struct lock *lock);
 
 /* 조건 변수. */
 struct condition {
