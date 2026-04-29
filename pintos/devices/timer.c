@@ -127,7 +127,14 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_awake(ticks); // 기상 시각이 지난 스레드를 꺼내 깨운다.
+
+	if (thread_mlfqs) {
+		thread_mlfqs_tick(ticks);
+	}
+
 	thread_tick (); // 현재 스레드의 실행 tick을 누적하고, time slice를 다 썼으면 양보를 예약한다.
+
+	if
 }
 
 /* `LOOPS`번 반복이 한 타이머 tick보다 오래 걸리면 true,

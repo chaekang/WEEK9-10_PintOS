@@ -414,6 +414,10 @@ void thread_yield(void)
 /* base priority를 new_priority로 바꾸고, donation을 반영해 effective priority를 갱신한다. */
 void thread_set_priority(int new_priority)
 {
+	if (thread_mlfqs) {
+		return;
+	}
+
 	thread_current()->init_priority = new_priority;
 	if (!list_empty(&ready_list)) {
 	
@@ -535,7 +539,17 @@ void mlfqs_calculate_load_avg(void) {
 	load_avg = DIV_MIX(MUL_FP(load_avg, 59), 60) + DIV_MIX(INT_TO_FP(mlfqs_ready_threads()), 60);
 }
 
-void mlfqs_calculate_all_priorities(void);
+void mlfqs_calculate_all_priorities(void) {
+	struct list_elem *e;
+
+	for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+		struct thread *t = list_entry(e, struct thread, allelem);
+		mlfqs_calculate_priority(t);
+	}
+
+	list_sort(&ready_list, cmp_priority, NULL);
+}
+
 void mlfqs_calculate_all_recent_cpu(void) {
 	struct list_elem *e;
 
@@ -559,6 +573,31 @@ void mlfqs_increase_recent_cpu(void) {
 	}
 }
 
+void thread_mlfqs_tick(int64_t ticks) {
+	mlfqs_increase_recent_cpu();
+
+	if (ticks % TIMER_FREQ == 0) {
+		mlfqs_calculate_load_avg();
+		mlfqs_calculate_all_recent_cpu();
+	}
+
+	if (ticks % 4 == 0) {
+		mlfqs_calculate_all_priorities();
+	}
+}
+
+/* getters */
+int
+thread_get_load_avg(void)
+{
+	return FP_TO_INT_NEAREST(MUL_MIX(load_avg, 100));
+}
+
+int
+thread_get_recent_cpu(void)
+{
+	return FP_TO_INT_NEAREST(MUL_MIX(thread_current()->recent_cpu, 100));
+}
 
 /* idle 스레드. 다른 어떤 스레드도 실행 준비가 안 되었을 때 실행된다.
 
