@@ -92,6 +92,7 @@ struct thread {
 	struct lock *wait_on_lock;
 	struct list donations;
 	struct list_elem donation_elem;
+	struct list_elem all_elem;
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;

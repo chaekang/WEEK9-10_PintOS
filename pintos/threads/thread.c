@@ -33,6 +33,9 @@ static struct list ready_list;
 /* 잠들어 있는 스레드들의 리스트. */
 static struct list sleep_list;
 
+/* 모든 스레드들의 리스트 */
+static struct list all_list;
+
 /* idle 스레드. */
 static struct thread *idle_thread;
 
@@ -110,6 +113,7 @@ void thread_init(void)
 	lock_init(&tid_lock);
 	list_init(&ready_list);
 	list_init(&sleep_list);
+	list_init(&all_list);
 	list_init(&destruction_req);
 
 	/* 현재 실행 중인 스레드에 대한 구조체를 설정한다. */
@@ -206,6 +210,9 @@ tid_t thread_create(const char *name, int priority,
 
 	/* 실행 큐에 추가한다. */
 	thread_unblock(t);
+
+	/* all_elem을 all_list에 추가 */
+	list_push_back(&all_list, &t->all_elem);
 
 	if (thread_current()->priority < t->priority)
 	{
@@ -359,7 +366,7 @@ tid_t thread_tid(void)
 void thread_exit(void)
 {
 	ASSERT(!intr_context());
-
+list_remove()
 #ifdef USERPROG
 	process_exit();
 #endif
@@ -524,6 +531,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->init_priority = priority;
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
+	list_init(&all_list);
 	t->magic = THREAD_MAGIC;
 }
 
