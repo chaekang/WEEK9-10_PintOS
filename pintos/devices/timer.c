@@ -133,8 +133,6 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	}
 
 	thread_tick (); // 현재 스레드의 실행 tick을 누적하고, time slice를 다 썼으면 양보를 예약한다.
-
-	if
 }
 
 /* `LOOPS`번 반복이 한 타이머 tick보다 오래 걸리면 true,
