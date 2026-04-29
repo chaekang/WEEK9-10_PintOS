@@ -210,13 +210,28 @@ lock_acquire (struct lock *lock) {
 	if (lock->holder != NULL) {
 		thread_current()->wait_on_lock = lock;
 		list_insert_ordered(&lock->holder->donations, &thread_current()->donation_elem, cmp_donation_priority, NULL);
-		if (thread_current()->priority > lock->holder->priority) {
-			lock->holder->priority = thread_current()->priority;
-		}
+		give_donation(lock);
 	}
 	sema_down (&lock->semaphore);
 	thread_current()->wait_on_lock = NULL;
 	lock->holder = thread_current();
+}
+
+void give_donation(struct lock *lock) {
+	int depth = 0;
+	int priority = thread_current()->priority;
+	struct lock *current_lock = lock;
+	
+	while(current_lock != NULL && current_lock->holder != NULL && depth < 8) {
+		struct thread *hold = current_lock->holder;
+		
+		if (hold->priority < priority)
+		{
+			hold->priority = priority;
+		}
+		current_lock = hold->wait_on_lock;
+		depth ++;
+	}
 }
 
 /* `LOCK` 획득을 시도하고, 성공하면 true 아니면 false를 반환한다.
