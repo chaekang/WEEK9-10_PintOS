@@ -31,7 +31,10 @@
 - 전체 테스트 통과 완료함
 
 #### 여서진
-
+- `alarm` 전 테스트 pass
+- `priority` 전 테스트 pass
+- `priority-donatino` 전 테스트 pass
+- `mlfqs` 미구현
 
 
 #### 위승철
