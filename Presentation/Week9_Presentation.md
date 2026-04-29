@@ -33,7 +33,7 @@
 #### 여서진
 - `alarm` 전 테스트 pass
 - `priority` 전 테스트 pass
-- `priority-donatino` 전 테스트 pass
+- `priority-donation` 전 테스트 pass
 - `mlfqs` 미구현
 
 
