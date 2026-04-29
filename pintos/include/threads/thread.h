@@ -102,6 +102,7 @@ struct  thread {
 
 	/* `thread.c`와 `synch.c`가 함께 사용한다. */
 	struct list_elem elem;              /* 리스트 원소. */
+	struct list_elem allelem;           /* 전체 리스트용 원소 */
 
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
