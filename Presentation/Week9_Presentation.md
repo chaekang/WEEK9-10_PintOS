@@ -23,7 +23,8 @@
 <img src="tests.png" width="300">
 
 #### 구름
-
+- `alarm`부터 `priority-donate`까지 구현 완료
+- `alarm`, `priority` 전 테스트 통과 완료
 
 #### 송채강
 
