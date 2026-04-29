@@ -120,7 +120,7 @@ struct  thread {
 /* 고정소수점 */
 #define F (1 << 14)
 #define INT_TO_FP(n) ((n) * F)                  /* 정수를 고정소수점으로 변환 */
-#define FP_TO_INT_ZERO(x) ((n) / F)             /* 고정소수점을 정수로 변환, 0을 향해 반올림 */
+#define FP_TO_INT_ZERO(x) ((x) / F)             /* 고정소수점을 정수로 변환, 0을 향해 반올림 */
 #define FP_TO_INT_ROUND(x) \            
 	((x) >= 0 ? (((x) + F / 2) / F) : (((x) - F / 2) / F)) /* 고정소수점을 정수로 변환, 가장 가까운 정수로 반올림 */
 #define FP_ADD(x, y) ((x) + (y))                /* x와 y 더하기 */

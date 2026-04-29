@@ -70,6 +70,8 @@ static void schedule(void);
 
 static tid_t allocate_tid(void);
 
+static void update_priority(struct thread *current);
+
 /* `T`가 유효한 스레드를 가리키는 것처럼 보이면 true를 반환한다. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -409,16 +411,34 @@ int thread_get_priority(void)
 }
 
 /* 현재 스레드의 nice 값을 `NICE`로 설정한다. */
-void thread_set_nice(int nice UNUSED)
+void thread_set_nice(int nice)
 {
-	/* TODO: 여기에 구현이 들어가야 한다. */
+	enum intr_level old_level = intr_disable();
+	
+	struct thread *current = thread_current();
+	current->nice = nice;
+
+	update_priority(current);
+
+	if (!list_empty(&ready_list)) {
+		struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+
+		if (t->priority > current->priority) {
+			thread_yield();
+		}
+	}
+
+	intr_set_level(old_level);
 }
 
 /* 현재 스레드의 nice 값을 반환한다. */
 int thread_get_nice(void)
 {
-	/* TODO: 여기에 구현이 들어가야 한다. */
-	return 0;
+	enum intr_level old_level = intr_disable();
+	int value = thread_current()->nice;
+	intr_set_level(old_level);
+
+	return value;
 }
 
 /* 시스템 load average의 100배 값을 반환한다. */
@@ -439,6 +459,20 @@ int thread_get_recent_cpu(void)
 	intr_set_level(old_level);
 
 	return value;
+}
+
+/* recent_cpu 값이 바뀜에 따라 우선순위 값을 갱신한다 */
+static void update_priority(struct thread *current) {
+	int priority = PRI_MAX - FP_TO_INT_ROUND(FP_DIV_INT(current->recent_cpu, 4)) - (current->nice * 2);
+
+	if (priority < PRI_MIN) {
+		priority = PRI_MIN;
+	}
+	else if (priority > PRI_MAX) {
+		priority = PRI_MAX;
+	}
+
+	current->priority = priority;
 }
 
 /* idle 스레드. 다른 어떤 스레드도 실행 준비가 안 되었을 때 실행된다.
