@@ -525,7 +525,7 @@ static void mlfqs_calculate_priority(struct thread *t) {
 // void mlfqs_calculate_recent_cpu(struct thread *t) {
 // 	if (t == idle_thread) {
 // 		return;
-// 	}
+// 	}--
 // 	int decay = FP_TO_INT_ZERO(MUL_MIX(load_avg, 2)) / (INT_TO_FP((load_avg, 2)) + 1);
 // 	t->recent_cpu = FP_TO_INT_ZERO(MUL_MIX(t->recent_cpu, decay)) + nice;
 // }
