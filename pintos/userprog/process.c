@@ -328,19 +328,26 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	
+	/* file_name 파싱을 위한 copy 만들기 */
 	char *file_name_copy = palloc_get_page(0);
 	if (file_name_copy == NULL) {
 		goto done;
 	}
 	strlcpy(file_name_copy, file_name, PGSIZE);
-	
+	/* NULL까지 반복하여 token 만들기 */
 	char *argv[64];
 	char *save_ptr;
-
-	for (int i=0; argv[i] == NULL; i++) {
-		argv[i] = strtok_r(file_name_copy, " ", &save_ptr); // strtok은 더 이상 토큰이 없으면 NULL 반환
+	char *token = strtok_r(file_name_copy, " ", &save_ptr);
+	if (token == NULL) {
+		goto done;
 	}
+	int argc = 0;
+	while (token != NULL && argc < 63 ) {
+		argv[argc] = token;
+		argc++;
+		token = strtok_r(NULL, " ", &save_ptr);
+	}
+	argv[argc] = NULL; // 배열의 마지막 값은 NULL로 설정
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
