@@ -328,10 +328,19 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
-	char *argv[3];
+	
+	char *file_name_copy = palloc_get_page(0);
+	if (file_name_copy == NULL) {
+		goto done;
+	}
+	strlcpy(file_name_copy, file_name, PGSIZE);
+	
+	char *argv[64];
 	char *save_ptr;
 
-	argv[0] = strtok_r(file_name, " ", save_ptr);
+	for (int i=0; argv[i] == NULL; i++) {
+		argv[i] = strtok_r(file_name_copy, " ", &save_ptr); // strtok은 더 이상 토큰이 없으면 NULL 반환
+	}
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -425,7 +434,10 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	if (file != NULL) {
+		file_close (file);
+	}
+	palloc_free_page(file_name_copy);
 	return success;
 }
 
