@@ -26,6 +26,7 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
 
 /* General process initializer for initd and other process. */
 static void
@@ -50,11 +51,39 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	char *tmp = palloc_get_page(0);
+	if (tmp == NULL) {
+		palloc_free_page(tmp);
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+
+	if (!parse_filename(file_name, tmp, PGSIZE)) {
+		palloc_free_page(tmp);
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
+	tid = thread_create (tmp, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
+	
+	palloc_free_page(tmp);
 	return tid;
+}
+
+static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size) {
+	if (tmp == NULL || file_name == NULL) {
+		return false;
+	}
+
+	strlcpy(tmp, file_name, tmp_size);
+
+	char *save_token;
+	char *token = strtok_r(tmp, " ", &save_token);
+	
+	return token != NULL;
 }
 
 /* A thread function that launches first user process. */
@@ -316,6 +345,8 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
 		bool writable);
 
+#define MAX_ARG 32
+
 /* Loads an ELF executable from FILE_NAME into the current thread.
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
@@ -335,12 +366,24 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	char *title = palloc_get_page(0);
+	if (title == NULL) {
+		return false;
+	}
+
+	if (!parse_filename(file_name, title, PGSIZE)) {
+		palloc_free_page(title);
+		return false;
+	}
+
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open(title);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
+		palloc_free_page(title);
 		goto done;
 	}
+	palloc_free_page(title);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -414,8 +457,69 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	char *tmp = palloc_get_page(0);
+	if (tmp == NULL) {
+		goto done;
+	}
+	char *save_token;   // 다음 토큰을 어디서부터 찾을지 기억하는 변수
+	char *argv[MAX_ARG+1];
+	char *arg_add[MAX_ARG];
+	int argc = 0;
+	
+	// 문자열 쪼개기
+	strlcpy(tmp, file_name, PGSIZE);
+	char *token = strtok_r(tmp, " ", &save_token);
+
+	while (token != NULL) {
+		if (argc >= MAX_ARG) {
+			palloc_free_page(tmp);
+			goto done;
+		}
+		argv[argc++] = token;
+		token = strtok_r(NULL, " ", &save_token);
+	}
+	argv[argc] = NULL;
+	
+	// 문자열 스택에 할당
+	for (int i = argc - 1; i >= 0; i--) {
+		size_t len = strlen(argv[i]) + 1;
+
+		if_->rsp -= len;
+		memcpy(if_->rsp, argv[i], len);
+		arg_add[i]= if_->rsp;
+	}
+
+	// 스택 포인터 8바이트 단위로 정렬
+	while ((uintptr_t) if_->rsp % 8 != 0) {
+		if_->rsp--;
+		*(uint8_t *)if_->rsp = 0;
+	}
+
+	// NULL 푸시
+	if_->rsp -= sizeof(char *);
+	*(char **)if_->rsp = NULL;
+
+	// 마지막 문자열부터 PUSH
+	for (int i = argc - 1; i >= 0; i--) {
+		if_->rsp -= sizeof(char *);
+		*(char **)if_->rsp = arg_add[i];
+	}
+
+	// argv 시작 주소 저장
+	char **argv_start = if_->rsp;
+
+	if_->rsp -= sizeof(char **);
+	*(char ***)if_->rsp = argv_start;
+
+	// fake return address 넣기
+	if_->rsp -= sizeof(void *);
+	*(void **) if_->rsp = NULL;
+
+	// 레지스터에 argc, argv 저장
+	if_->R.rdi = argc;
+	if_->R.rsi = argv_start;
+	
+	palloc_free_page(tmp);
 
 	success = true;
 
