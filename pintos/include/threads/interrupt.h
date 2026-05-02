@@ -52,13 +52,13 @@ struct intr_frame {
 	uint64_t error_code;
 /* CPU가 푸시한다.
    인터럽트된 작업의 레지스터를 저장한 값이다. */
-	uintptr_t rip;
-	uint16_t cs;
+	uintptr_t rip;    // 인터럽트가 걸리기 직전에 실행하던 명령어 주소. 복귀하면 여기부터 실행
+	uint16_t cs;      // 코드 세그먼트 선택자. 사용자 모드 코드인지, 커널 코드인지 구분하는데 쓰임
 	uint16_t __pad5;
 	uint32_t __pad6;
-	uint64_t eflags;
-	uintptr_t rsp;
-	uint16_t ss;
+	uint64_t eflags;  // CPU 상태 플래그 레지스터, 인터럽트 허용 여부, 산술 결과 플래그, 방향 플래그 등이 들어있음
+	uintptr_t rsp;    // 인터럽트 직전의 스택 포인터, 복귀 시 원래 위치로 돌아가기 위해 사용
+	uint16_t ss;      // 스택 세그먼트 선택자, 사용자 모드와 커널 모드를 오갈 때 사용
 	uint16_t __pad7;
 	uint32_t __pad8;
 } __attribute__((packed));
