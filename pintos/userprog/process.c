@@ -334,7 +334,7 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 	strlcpy(file_name_copy, file_name, PGSIZE);
-	/* NULL까지 반복하여 token 만들기 */
+	/* NULL까지 반복하여 argv 만들기 */
 	char *argv[64];
 	char *save_ptr;
 	char *token = strtok_r(file_name_copy, " ", &save_ptr);
@@ -435,7 +435,24 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* 스택에 토큰 올리기 */
+	// 스택 맨 위 문자열 삽입
+	while (argv[i] != NULL) {
+		size_t str_len = strnlen(argv[i]);
+		if_->rsp -= str_len;
+		if_rsp = argv[i];
+		i++;
+	}
+	
+	// 맨 처음 NULL 삽입
+	if_->rsp -= 8;
+
+	// rsp를 늘리고 agrv 역순으로 삽입 반복 until argc == 0
+	size_t token_len = sizeof(argv[i]);
+	if_->rsp -= token_len;
+	memcpy((void *) if_->rsp, &argv[i], token_len);
+	// 마지막에 가짜 return 주소 삽입
 
 	success = true;
 
