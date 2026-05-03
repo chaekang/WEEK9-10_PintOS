@@ -245,6 +245,9 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	struct intr_frame f = curr->tf;
+	printf ("%s: exit(%d)\n", thread_name(), f.R.rdi);
+
 	process_cleanup ();
 }
 
