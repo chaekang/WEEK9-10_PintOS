@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "threads/loader.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
 
@@ -41,6 +42,27 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
+	/*
+	 * exit_status 저장
+	 * process 종료 메시지 출력
+	 * 부모 wait 깨움
+	 * process_exit()
+	 * thread_wait() 
+	*/
+
+	struct thread *t = thread_current();
+
 	printf ("system call!\n");
-	thread_exit ();
+
+	switch (f->R.rax)
+	{
+	case SYS_EXIT:
+		uint64_t status = f->R.rdi;
+		t->exit_status = status;
+		thread_exit ();
+		break;
+	
+	default:
+		break;
+	}
 }
