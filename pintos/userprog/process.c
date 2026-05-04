@@ -386,8 +386,6 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
 		bool writable);
 
-#define MAX_ARG 32
-
 /* Loads an ELF executable from FILE_NAME into the current thread.
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
@@ -400,6 +398,26 @@ load (const char *file_name, struct intr_frame *if_) {
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	/* file_name 파싱을 위한 copy 만들기 */
+	char *file_name_copy = palloc_get_page(0);
+	if (file_name_copy == NULL) {
+		goto done;
+	}
+	strlcpy(file_name_copy, file_name, PGSIZE);
+	/* NULL까지 반복하여 argv 만들기 */
+	char *argv[64];
+	char *save_ptr;
+	char *token = strtok_r(file_name_copy, " ", &save_ptr);
+	if (token == NULL) {
+		goto done;
+	}
+	int argc = 0;
+	while (token != NULL && argc < 63 ) {
+		argv[argc] = token;
+		argc++;
+		token = strtok_r(NULL, " ", &save_ptr);
+	}
+	argv[argc] = NULL; // 배열의 마지막 값은 NULL로 설정
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -407,24 +425,12 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
-	char *title = palloc_get_page(0);
-	if (title == NULL) {
-		return false;
-	}
-
-	if (!parse_filename(file_name, title, PGSIZE)) {
-		palloc_free_page(title);
-		return false;
-	}
-
 	/* Open executable file. */
-	file = filesys_open(title);
+	file = filesys_open (argv[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
-		palloc_free_page(title);
+		printf ("load: %s: open failed\n", argv[0]);
 		goto done;
 	}
-	palloc_free_page(title);
 
 	/* Read and verify executable header. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -498,72 +504,60 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	char *tmp = palloc_get_page(0);
-	if (tmp == NULL) {
-		goto done;
-	}
-	char *save_token;   // 다음 토큰을 어디서부터 찾을지 기억하는 변수
-	char *argv[MAX_ARG+1];
-	char *arg_add[MAX_ARG];
-	int argc = 0;
-	
-	// 문자열 쪼개기
-	strlcpy(tmp, file_name, PGSIZE);
-	char *token = strtok_r(tmp, " ", &save_token);
+	/* TODO: Your code goes here.
+	/* TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* 스택에 토큰 올리기 */
+	// 스택 맨 위에 명령줄 문자열 삽입한다
+	char *arg_addr[64];
+	int j = 0;
 
-	while (token != NULL) {
-		if (argc >= MAX_ARG) {
-			palloc_free_page(tmp);
-			goto done;
-		}
-		argv[argc++] = token;
-		token = strtok_r(NULL, " ", &save_token);
-	}
-	argv[argc] = NULL;
-	
-	// 문자열 스택에 할당
-	for (int i = argc - 1; i >= 0; i--) {
-		size_t len = strlen(argv[i]) + 1;
+	while (argv[j] != NULL) {
+		size_t str_len = strlen(argv[j]) + 1;
 
-		if_->rsp -= len;
-		memcpy(if_->rsp, argv[i], len);
-		arg_add[i]= if_->rsp;
+		if_->rsp -= str_len;
+		memcpy((void *)if_->rsp, argv[j], str_len);
+
+		arg_addr[j] = (char *)if_->rsp;
+		j++;
 	}
 
-	// 스택 포인터 8바이트 단위로 정렬
-	while ((uintptr_t) if_->rsp % 8 != 0) {
+	// 스택 주소 시작점을 word 크기로 정렬한다
+	while (if_->rsp % 8 != 0) {
 		if_->rsp--;
 		*(uint8_t *)if_->rsp = 0;
 	}
 
-	// NULL 푸시
-	if_->rsp -= sizeof(char *);
-	*(char **)if_->rsp = NULL;
+	// 맨 처음 NULL 삽입
+	if_->rsp -= 8;
+	char *null_ptr = NULL;
+	memcpy((void *)if_->rsp, &null_ptr, sizeof(null_ptr));
 
-	// 마지막 문자열부터 PUSH
-	for (int i = argc - 1; i >= 0; i--) {
-		if_->rsp -= sizeof(char *);
-		*(char **)if_->rsp = arg_add[i];
+
+	// rsp를 늘리고 agrv 역순으로 삽입 반복 until argc == 0
+	while (j > 0) {
+		j--;
+		if_->rsp -= 8;
+		memcpy((void *)if_->rsp, &arg_addr[j], sizeof(arg_addr[j]));
 	}
 
-	// argv 시작 주소 저장
-	char **argv_start = if_->rsp;
+	// argv 시작 주소
+	char **argv_addr = (char **) if_->rsp;
 
-	// fake return address 넣기
-	if_->rsp -= sizeof(void *);
-	*(void **) if_->rsp = NULL;
+	// 마지막에 가짜 return 주소 삽입
+	char *fake_rex = 0;
+	if_->rsp -= sizeof(fake_rex);
+	memcpy((void *)if_->rsp, &fake_rex, sizeof(fake_rex));
 
-	// 레지스터에 argc, argv 저장
 	if_->R.rdi = argc;
-	if_->R.rsi = argv_start;
-	
-	palloc_free_page(tmp);
-
+	if_->R.rsi = argv_addr;
 	success = true;
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	if (file != NULL) {
+		file_close (file);
+	}
+	palloc_free_page(file_name_copy);
 	return success;
 }
 
