@@ -42,13 +42,6 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	/*
-	 * exit_status 저장
-	 * process 종료 메시지 출력
-	 * 부모 wait 깨움
-	 * process_exit()
-	 * thread_wait() 
-	*/
 
 	struct thread *t = thread_current();
 

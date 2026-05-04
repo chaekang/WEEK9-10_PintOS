@@ -17,6 +17,7 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -187,6 +188,16 @@ error:
 	thread_exit ();
 }
 
+// 자식 스레드 상태
+struct child_status {
+	tid_t tid;                     /* 자식 스레드 tid */
+	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
+	bool exited;                   /* 자식이 종료했는지 여부 */
+	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
+	struct list_elem elem;         /* child list 리스트 노드 */
+};
+
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
@@ -245,8 +256,23 @@ process_exit (void) {
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
 
+	/*
+	 * 종료 메시지 출력
+	 * 부모가 wait()로 회수할 수 있도록 종료 상태 반영
+	 * 부모가 기다리고 있으면 깨우기
+	 * 열린 자원 정리
+	 * 주소 공간 정리
+	*/
 	struct intr_frame f = curr->tf;
-	printf ("%s: exit(%d)\n", thread_name(), f.R.rdi);
+	printf ("%s: exit(%d)\n", thread_name(), curr->exit_status);
+
+	// struct child_status *child = curr->my_status;
+	// child->exit_status = curr->exit_status;
+	// child->exited = true;
+
+	// if (child->waited) {
+	// 	sema_up(&child->wait_sema);
+	// }
 
 	process_cleanup ();
 }
