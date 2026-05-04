@@ -386,6 +386,8 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
 		bool writable);
 
+#define MAX_ARGC 63
+
 /* Loads an ELF executable from FILE_NAME into the current thread.
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
@@ -405,14 +407,17 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 	strlcpy(file_name_copy, file_name, PGSIZE);
 	/* NULL까지 반복하여 argv 만들기 */
-	char *argv[64];
+	char *argv[MAX_ARGC + 1];
 	char *save_ptr;
 	char *token = strtok_r(file_name_copy, " ", &save_ptr);
 	if (token == NULL) {
 		goto done;
 	}
 	int argc = 0;
-	while (token != NULL && argc < 63 ) {
+	while (token != NULL) {
+		if (argc >= MAX_ARGC) {
+			goto done;
+		}
 		argv[argc] = token;
 		argc++;
 		token = strtok_r(NULL, " ", &save_ptr);
@@ -508,7 +513,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Implement argument passing (see project2/argument_passing.html). */
 	/* 스택에 토큰 올리기 */
 	// 스택 맨 위에 명령줄 문자열 삽입한다
-	char *arg_addr[64];
+	char *arg_addr[MAX_ARGC];
 	int j = 0;
 
 	while (argv[j] != NULL) {
