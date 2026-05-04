@@ -9,9 +9,14 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "intrinsic.h"
+#include "filesys/filesys.h"
+#include "threads/synch.h"
+#include "threads/vaddr.h"
+#include "threads/mmu.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static struct lock filesys_lock;
 
 /* 시스템 호출.
  *
@@ -37,6 +42,7 @@ syscall_init (void) {
 	 * FLAG_FL을 마스킹한다. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	lock_init(&filesys_lock);
 }
 
 /* 메인 시스템 호출 인터페이스 */
@@ -55,6 +61,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	}
 
+	case SYS_CREATE: {
+		
+	}
+
 	case SYS_WRITE: {
 		if ((int) f->R.rdi == 1) {
 			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
@@ -69,5 +79,27 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	
 	default:
 		break;
+	}
+}
+
+/*
+포인터가 null 이거나 커널 주소거나 매핑 안 된 주소면 커널이 터질 수 있음
+문자열 포인터가 유효한지 검사하는 함수
+*/
+static void check_user_string(const char *s) {
+	struct thread *cur = thread_current();
+	if (s == NULL) {
+		cur->exit_status = -1;
+		thread_exit();
+	}
+	while (true) {
+		if (!is_user_vaddr(s) || pml4_get_page(cur->pml4, s) == NULL) {
+			cur->exit_status = -1;
+			thread_exit();
+		}
+		if (*s == '\0') {
+			break;
+		}
+		s++;
 	}
 }

@@ -626,6 +626,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->origin_priority = priority;
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
+	#ifdef USERPROG
+	list_init(&t->fd_list);
+	t->next_fd = 2;
+	#endif
 
 	t->nice = 0;
 	t->recent_cpu = 0;
