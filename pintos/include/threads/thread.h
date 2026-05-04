@@ -92,13 +92,19 @@ struct  thread {
 
 	struct lock *wait_on_lock;          /* 현재 스레드에서 기다리고 있는 lock */
 	struct list donations;              /* 우선순위 기부해준 리스트 목록 */
-	struct list_elem donation_elem;    /* 타 스레드 donation 리스트의 원소 */
+	struct list_elem donation_elem;     /* 타 스레드 donation 리스트의 원소 */
+
+	int nice;                           /* nice 값 */
+	int recent_cpu;                     /* 스레드가 최근에 사용한 CPU양 */
 
 	/* 스레드가 깨어나야 하는 절대 tick 시각. */
 	int64_t wakeup_tick;
 
 	/* `thread.c`와 `synch.c`가 함께 사용한다. */
 	struct list_elem elem;              /* 리스트 원소. */
+	struct list_elem allelem;           /* 전체 리스트용 원소 */
+
+	uint64_t exit_status;               /* 종료 코드 */
 
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
@@ -113,6 +119,21 @@ struct  thread {
 	struct intr_frame tf;               /* 문맥 전환용 정보. */
 	unsigned magic;                     /* 스택 오버플로를 감지한다. */
 };
+
+/* 고정소수점 */
+#define F (1 << 14)
+#define INT_TO_FP(n) ((n) * F)                  /* 정수를 고정소수점으로 변환 */
+#define FP_TO_INT_ZERO(x) ((x) / F)             /* 고정소수점을 정수로 변환, 0을 향해 반올림 */
+#define FP_TO_INT_ROUND(x) \            
+	((x) >= 0 ? (((x) + F / 2) / F) : (((x) - F / 2) / F)) /* 고정소수점을 정수로 변환, 가장 가까운 정수로 반올림 */
+#define FP_ADD(x, y) ((x) + (y))                /* x와 y 더하기 */
+#define FP_SUB(x, y) ((x) - (y))                /* x에서 y 빼기 */
+#define FP_ADD_INT(x, n) ((x) + (n) * F)        /* x와 n 더하기 */
+#define FP_SUB_INT(x, n) ((x) - (n) * F)        /* x에서 n 빼기 */
+#define FP_MUL(x, y) ((int64_t)(x) * (y) / F)   /* x와 y 곱하기 */
+#define FP_MUL_INT(x, n) ((x) * (n))            /* x와 n 곱하기 */
+#define FP_DIV(x, y) ((int64_t)(x) * F / (y))   /* x를 y로 나누기 */
+#define FP_DIV_INT(x, n) ((x) / (n))            /* x를 n으로 나누기 */
 
 /* false(기본값)면 라운드 로빈 스케줄러를 사용한다.
    true면 다단계 피드백 큐 스케줄러를 사용한다.

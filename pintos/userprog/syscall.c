@@ -5,7 +5,9 @@
 #include "threads/thread.h"
 #include "threads/loader.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "threads/flags.h"
+#include "threads/init.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -40,7 +42,29 @@ syscall_init (void) {
 /* 메인 시스템 호출 인터페이스 */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: 여기에 구현을 작성한다.
-	printf ("system call!\n");
-	thread_exit ();
+	// TODO: Your implementation goes here.
+
+	struct thread *t = thread_current();
+
+	switch (f->R.rax)
+	{
+	case SYS_EXIT:
+		uint64_t status = f->R.rdi;
+		t->exit_status = status;
+		thread_exit ();
+		break;
+
+	case SYS_WRITE:
+		if ((int) f->R.rdi == 1) {
+			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
+			f->R.rax = f->R.rdx;
+		}
+		break;
+	
+	case SYS_HALT:
+		power_off();
+	
+	default:
+		break;
+	}
 }
