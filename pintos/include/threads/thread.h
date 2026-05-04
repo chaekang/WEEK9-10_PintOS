@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -107,6 +108,11 @@ struct  thread {
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */
+	int exit_status;
+	struct semaphore wait_sema; // 내가 끝났는지 부모에게 알려줄 세마포어
+	struct list children;	// 내 자식들을 담는 리스트
+	struct list_elem child_elem; // 내가 부모의 자식 리스트에 들어갈 때 쓰는 elem
+	struct thread *parent; // 내 부모가 누구인지 가르키는 포인터
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */

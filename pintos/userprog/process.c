@@ -473,8 +473,6 @@ load (char *file_name, struct intr_frame *if_) {
 	if_->R.rdi = argc;
 	if_->R.rsi = argv_start;
 
-	hex_dump(if_->rsp, (void *)if_->rsp, USER_STACK - if_->rsp, true);
-
 	success = true;
 done:
 	/* We arrive here whether the load is successful or not. */

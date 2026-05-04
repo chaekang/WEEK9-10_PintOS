@@ -227,6 +227,11 @@ tid_t thread_create(const char *name, int priority,
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
 
+	#ifdef USERPROG
+	t->parent = thread_current();
+	list_push_back(&thread_current()->children, &t->child_elem);
+	#endif
+
 	if (t != thread_current()) {
 		t->nice = thread_current()->nice;
 		t->recent_cpu = thread_current()->recent_cpu;
@@ -629,6 +634,13 @@ init_thread(struct thread *t, const char *name, int priority)
 
 	t->nice = 0;
 	t->recent_cpu = 0;
+
+	#ifdef USERPROG
+	t->exit_status = 0;
+	sema_init(&t->wait_sema, 0);
+	list_init(&t->children);
+	t->parent = NULL;
+	#endif
 
 	t->magic = THREAD_MAGIC;
 }
