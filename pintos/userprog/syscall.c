@@ -10,9 +10,11 @@
 #include "threads/init.h"
 #include "intrinsic.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
+#include "threads/malloc.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -69,6 +71,30 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		lock_release(&filesys_lock);
 		f->R.rax = result;
 		break;
+	}
+
+	case SYS_OPEN: {
+		const char *file = (const char *) f->R.rdi;
+		lock_acquire(&filesys_lock);
+		struct file *opened = filesys_open(file);
+		lock_release(&filesys_lock);
+		if (opened == NULL) {
+			f->R.rax = -1;
+			break;
+		}
+		struct fd_entry *entry = malloc(sizeof *entry);
+		if (entry == NULL) {
+			file_close(opened);
+			f->R.rax = -1;
+			break;
+		}
+		entry->fd = t->next_fd;
+		entry->file = opened;
+		t->next_fd ++;
+		list_push_back(&t->fd_list, &entry->elem);
+		f->R.rax = entry->fd;
+		break;
+
 	}
 
 	case SYS_WRITE: {

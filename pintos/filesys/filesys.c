@@ -56,15 +56,17 @@ filesys_done (void) {
 /* Creates a file named NAME with the given INITIAL_SIZE.
  * Returns true if successful, false otherwise.
  * Fails if a file named NAME already exists,
- * or if internal memory allocation fails. */
+ * or if internal memory allocation fails.
+ * name = 만들 파일 이름, initial_size = 파일 초기 크기 */
 bool
 filesys_create (const char *name, off_t initial_size) {
 	disk_sector_t inode_sector = 0;
 	struct dir *dir = dir_open_root ();
+	// 루트 디렉토리 열기 성공 && 디스크에서 inode용 빈 섹터 1개할당 && 그 섹터에 파일 inode 생성 성공 && 루트 티렉터리 이름등록 -> True
 	bool success = (dir != NULL
 			&& free_map_allocate (1, &inode_sector)
 			&& inode_create (inode_sector, initial_size)
-			&& dir_add (dir, name, inode_sector));
+			&& dir_add (dir, name, inode_sector));	// 이름 공백, 최대길이, 중복이름 검사
 	if (!success && inode_sector != 0)
 		free_map_release (inode_sector, 1);
 	dir_close (dir);
