@@ -29,6 +29,10 @@ static void initd (void *f_name);
 static void __do_fork (void *);
 static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
 
+static struct semaphore wait_sema;
+static bool waited;
+static int exit_status;
+
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
@@ -65,12 +69,18 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	}
 
+	if (!waited) {
+		sema_init(&wait_sema, 0);
+		waited = true;
+	}
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (tmp, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
 		palloc_free_page (fn_copy);
 	
 	palloc_free_page(tmp);
+
 	return tid;
 }
 
@@ -244,7 +254,8 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	return -1;
+	sema_down(&wait_sema);
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -263,9 +274,10 @@ process_exit (void) {
 	 * 열린 자원 정리
 	 * 주소 공간 정리
 	*/
-	struct intr_frame f = curr->tf;
 	printf ("%s: exit(%d)\n", thread_name(), curr->exit_status);
-
+	exit_status = curr->exit_status;
+	sema_up(&wait_sema);
+	
 	// struct child_status *child = curr->my_status;
 	// child->exit_status = curr->exit_status;
 	// child->exited = true;

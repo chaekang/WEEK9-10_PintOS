@@ -45,14 +45,19 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 	struct thread *t = thread_current();
 
-	printf ("system call!\n");
-
 	switch (f->R.rax)
 	{
 	case SYS_EXIT:
 		uint64_t status = f->R.rdi;
 		t->exit_status = status;
 		thread_exit ();
+		break;
+
+	case SYS_WRITE:
+		if ((int) f->R.rdi == 1) {
+			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
+			f->R.rax = f->R.rdx;
+		}
 		break;
 	
 	default:
