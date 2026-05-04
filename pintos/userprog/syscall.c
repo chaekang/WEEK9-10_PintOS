@@ -50,7 +50,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	{
 	case SYS_EXIT: {
 		uint64_t status = f->R.rdi;
-		//t->exit_status = status;
+		t->exit_status = status;
 		thread_exit ();
 		break;
 	}

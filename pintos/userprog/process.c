@@ -29,14 +29,13 @@ static void initd (void *f_name);
 static void __do_fork (void *);
 static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
 
-static struct semaphore wait_sema;
-static bool waited;
-static int exit_status;
-
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+
+	list_init(&current->child_list);
+	current->my_status = NULL;
 }
 
 /* FILE_NAME에서 읽어들인 첫 번째 사용자 영역 프로그램 "initd"를 시작한다.
@@ -246,12 +245,53 @@ process_exec (void *f_name) {
  *
  * 이 함수는 problem 2-2에서 구현한다. 현재는 아무 일도 하지 않는다. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	sema_down(&wait_sema);
-	return exit_status;
+
+	/*
+	 * 현재 스레드의 child list 확인
+	 * child tid 찾기 - 없으면 -1, wait 했으면 -1
+	 * 안 죽었으면 waited -> sema_down
+	 * 죽었으면 exit_status 읽기
+	 * child 상태 리스트에서 제거 및 해제
+	 * exit_status 반환
+	*/
+
+
+	struct thread *cur = thread_current();
+	struct list *child_list = &cur->child_list;
+	struct child_status *child = NULL;
+
+	struct list_elem *e;
+	for (e = list_begin(child_list); e != list_end(child_list); e = list_next(e)) {
+		struct child_status *tmp = list_entry(e, struct child_status, elem);
+		if (tmp->tid == child_tid) {
+			child = tmp;
+			break;
+		}
+	}
+
+	if (child == NULL) {
+		return -1;
+	}
+
+	if (child->waited) {
+		return -1;
+	}
+
+	child->waited = true;
+
+	if (!child->exited) {
+		sema_down(&child->wait_sema);
+	}
+	int status = child->exit_status;
+
+	list_remove(&child->elem);
+	free(child);
+
+	return status;
 }
 
 /* 프로세스를 종료한다. 이 함수는 thread_exit()에서 호출된다. */
@@ -271,16 +311,14 @@ process_exit (void) {
 	 * 주소 공간 정리
 	*/
 	printf ("%s: exit(%d)\n", thread_name(), (int) curr->exit_status);
-	exit_status = curr->exit_status;
-	sema_up(&wait_sema);
 	
-	// struct child_status *child = curr->my_status;
-	// child->exit_status = curr->exit_status;
-	// child->exited = true;
+	struct child_status *child = curr->my_status;
 
-	// if (child->waited) {
-	// 	sema_up(&child->wait_sema);
-	// }
+	if (child != NULL) {
+		child->exit_status = curr->exit_status;
+		child->exited = true;
+		sema_up(&child->wait_sema);
+	}
 
 	process_cleanup ();
 }
