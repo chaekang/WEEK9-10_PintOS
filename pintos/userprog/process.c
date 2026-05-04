@@ -208,7 +208,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while (true) {
+	for (int i = 0; i < 10000; i++) {
     	thread_yield ();
 	}
 	return -1;
@@ -492,10 +492,7 @@ load (const char *file_name, struct intr_frame *if_) {
 		if_->rsp -= sizeof(uintptr_t);
 		memcpy((void *)if_->rsp, &arg_addr[i], sizeof(arg_addr[i]));
 	}
-
-	// argc 값을 메모리에 푸시
-	if_->rsp -= sizeof(uintptr_t);
-	memcpy((void *)if_->rsp, &argc, sizeof(argc));
+	uintptr_t argv_addr = if_->rsp;
 
 	// 가짜 리턴 주소값을 메모리에 푸시
 	uintptr_t fake_return_addr = 0;
@@ -503,7 +500,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	memcpy((void *)if_->rsp, &fake_return_addr, sizeof(fake_return_addr));
 
 	if_->R.rdi = argc;
-	if_->R.rsi = argv_start_addr;
+	if_->R.rsi = argv_addr;
 
 	success = true;
 
