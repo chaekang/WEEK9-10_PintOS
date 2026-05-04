@@ -23,7 +23,7 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -164,7 +164,7 @@ int
 process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
-
+	
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
@@ -177,7 +177,7 @@ process_exec (void *f_name) {
 	process_cleanup ();
 
 	/* And then load the binary */
-	success = load (file_name, &_if);
+	success = load(file_name, &_if);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
@@ -188,6 +188,8 @@ process_exec (void *f_name) {
 	do_iret (&_if);
 	NOT_REACHED ();
 }
+
+
 
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -321,13 +323,32 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	char *save_ptr;
+	char *argv[128];
+	int argc = 0;
+	uintptr_t arg_addr[128];
+
+	char *token = strtok_r(file_name, " ", &save_ptr);
+	while (token != NULL) {
+		if (argc == 127) {
+			goto done;
+		}
+		argv[argc] = token;
+		argc++;
+		token = strtok_r(NULL, " ", &save_ptr);
+	}
+
+	argv[argc] = NULL;
+	if (argc == 0) {
+		goto done;
+	}
 
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
@@ -336,9 +357,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
-	file = filesys_open (file_name);
+	file = filesys_open (argv[0]);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
+		printf("load: %s: open failed\n", argv[0]);
 		goto done;
 	}
 
@@ -350,7 +371,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
+		printf("load: %s: error loading executable\n", argv[0]);
 		goto done;
 	}
 
@@ -414,17 +435,40 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	for (int i=argc-1; i>=0; i--) {
+		int len = strlen(argv[i]) + 1;
+		if_->rsp -= len;
+		memcpy((void *) if_->rsp, argv[i], len);
+		arg_addr[i] = if_->rsp;
+	}
+	
+	int padding = if_->rsp % 8;
+	if (padding != 0) {
+		if_->rsp -= padding;
+		memset((void *) if_->rsp, 0, padding);
+	}
+	if_->rsp -= sizeof(char *);
+	memset((void *)if_->rsp, 0, sizeof(char *));
+
+	for (int i = argc-1; i>=0; i--) {
+		int len = sizeof(char *);
+		if_->rsp -= len;
+		memcpy((void *) if_->rsp, &arg_addr[i], len);
+	}
+
+	uintptr_t argv_start = if_->rsp;
+	if_->rsp -= sizeof(char *);
+	memset((void *) if_->rsp, 0, sizeof(char *));
+
+	if_->R.rdi = argc;
+	if_->R.rsi = argv_start;
 
 	success = true;
-
 done:
 	/* We arrive here whether the load is successful or not. */
 	file_close (file);
 	return success;
 }
-
 
 /* Checks whether PHDR describes a valid, loadable segment in
  * FILE and returns true if so, false otherwise. */
