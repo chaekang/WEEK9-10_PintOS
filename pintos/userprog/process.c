@@ -549,9 +549,6 @@ load (const char *file_name, struct intr_frame *if_) {
 	// argv 시작 주소 저장
 	char **argv_start = if_->rsp;
 
-	if_->rsp -= sizeof(char **);
-	*(char ***)if_->rsp = argv_start;
-
 	// fake return address 넣기
 	if_->rsp -= sizeof(void *);
 	*(void **) if_->rsp = NULL;
