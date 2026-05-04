@@ -104,6 +104,8 @@ struct  thread {
 	struct list_elem elem;              /* 리스트 원소. */
 	struct list_elem allelem;           /* 전체 리스트용 원소 */
 
+	int exit_status;
+
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */

@@ -208,6 +208,9 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while (true) {
+    	thread_yield ();
+	}
 	return -1;
 }
 
@@ -219,7 +222,9 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	if (curr->pml4 != NULL) {
+		printf("%s: exit(%d)\n", thread_current()->name, thread_current()->exit_status);
+	}
 	process_cleanup ();
 }
 
@@ -495,16 +500,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	// *(uintptr_t *) if_->rsp = argv_start_addr;
 
 	// argc 값을 메모리에 푸시
-	uintptr_t argc_value = argc;
 	if_->rsp -= sizeof(uintptr_t);
-	memcpy((void *)if_->rsp, &argc_value, sizeof(argc_value));
+	memcpy((void *)if_->rsp, &argc, sizeof(argc));
 
 	// 가짜 리턴 주소값을 메모리에 푸시
 	uintptr_t fake_return_addr = 0;
 	if_->rsp -= sizeof(uintptr_t);
 	memcpy((void *)if_->rsp, &fake_return_addr, sizeof(fake_return_addr));
 
-	if_->R.rdi = argc_value;
+	if_->R.rdi = argc;
 	if_->R.rsi = argv_start_addr;
 
 	success = true;

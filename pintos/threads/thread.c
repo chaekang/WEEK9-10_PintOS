@@ -630,6 +630,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->nice = 0;
 	t->recent_cpu = 0;
 
+	t->exit_status = -1;
+
 	t->magic = THREAD_MAGIC;
 }
 
