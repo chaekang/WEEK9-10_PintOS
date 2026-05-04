@@ -62,7 +62,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	}
 
 	case SYS_CREATE: {
-		
+		const char *file = (const char *) f->R.rdi;
+		unsigned size = f->R.rsi;
+		lock_acquire(&filesys_lock);
+		bool result = filesys_create(file, size);
+		lock_release(&filesys_lock);
+		f->R.rax = result;
+		break;
 	}
 
 	case SYS_WRITE: {
