@@ -1,4 +1,4 @@
-PR 제목 형식: `[alarm|priority|mlfqs] 핵심 변경 한 줄`
+PR 제목 형식: `[args|syscall|process] 핵심 변경 한 줄`
 
 ## 변경 내용
 -

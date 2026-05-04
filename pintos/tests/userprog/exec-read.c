@@ -1,4 +1,4 @@
-/* Read document for exec() carefully... */
+/* exec() 문서를 꼼꼼히 읽어 보자... */
 
 #include <stdio.h>
 #include <string.h>

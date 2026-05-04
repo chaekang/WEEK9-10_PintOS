@@ -1,9 +1,8 @@
-# Percentage of the testing point total designated for each set of
-# tests.
+# 각 테스트 묶음에 배정된 전체 테스트 점수 비율
 
-# This project is primarily about implementing system calls.
-# If you do so properly, the base file system functionality
-# should come "for free".  Thus, the points emphasis below.
+# 이 프로젝트의 핵심은 시스템 호출 구현이다.
+# 이를 올바르게 구현하면 기본 파일 시스템 기능은
+# 자연스럽게 함께 동작해야 한다. 그래서 아래와 같은 배점 비중을 둔다.
 
 2%	tests/threads/Rubric.alarm
 3%	tests/threads/Rubric.priority
@@ -12,5 +11,5 @@
 10%	tests/userprog/no-vm/Rubric
 15%	tests/filesys/base/Rubric
 
-# Extra project
+# 추가 프로젝트
 20%	tests/userprog/dup2/Rubric
