@@ -1,6 +1,6 @@
-/* This is just for fun.
+/* 이건 그냥 재미로 넣은 것이다.
      
-   Written by Minkyu Jung, Jinyoung Oh <cs330_ta@casys.kaist.ac.kr>
+   작성: Minkyu Jung, Jinyoung Oh <cs330_ta@casys.kaist.ac.kr>
 */
 
 #include <debug.h>

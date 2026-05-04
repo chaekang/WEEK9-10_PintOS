@@ -1,4 +1,4 @@
-/* Wait for a subprocess to finish. */
+/* 서브프로세스가 끝날 때까지 기다린다. */
 
 #include <syscall.h>
 #include "tests/lib.h"
