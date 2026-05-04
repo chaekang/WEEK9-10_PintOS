@@ -12,6 +12,7 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static struct lock filesys_lock;
 
 /* 시스템 호출.
  *
@@ -37,6 +38,48 @@ syscall_init (void) {
 	 * FLAG_FL을 마스킹한다. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+	list_init(&filesys_lock);
+}
+
+int read(int fd, void *buffer, unsigned size) {
+	//   fd == 1: 실패
+	if (fd == 1) {
+		return -1;
+	}
+	// size 검사
+		if (size == 0) {
+		return 0;
+	}
+	// 버퍼 시작 주소 검사
+	if (buffer == NULL) {
+		return exit(-1);
+	}
+	// buffer 전체 범위 유효성 검사
+	char *start = buffer;
+	char *end = start + size -1;
+	char *p= buffer;
+
+
+	for (p = start; p <= end; p++) {
+		if (is_user_vaddr(p) && pml4_get_page(thread_current()->pml4, p) ) {
+			continue;
+		}
+		else {
+			return exit(-1); // exit syscall 구현 에정
+		}
+	}
+
+
+	// 실제 read 수행
+	//   stdin이면 input_getc로 buffer에 size만큼 쓰기
+	//   file이면 filesys lock 획득 후 file_read
+
+	// file이면 filesys lock 해제
+
+	// 읽은 바이트 수 반환
+
+
+
 }
 
 /* 메인 시스템 호출 인터페이스 */

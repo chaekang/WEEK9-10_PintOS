@@ -82,6 +82,13 @@ typedef int tid_t;
  * 원소가 될 수도 있다. 이 두 용도가 동시에 겹치지 않는 이유는
  * 준비 상태의 스레드만 실행 큐에 있고, 블록 상태의 스레드만
  * 세마포어 대기 리스트에 있기 때문이다. */
+struct file;
+struct fd_entry {
+	int fd;                    /* fd 번호 */
+	struct file *file;         /* 실제 열린 파일 객체 */
+	struct list_elem elem;     /* fd_list에 연결되기 위한 노드 */
+};
+
 struct  thread {
 	/* `thread.c`가 관리한다. */
 	tid_t tid;                          /* 스레드 식별자. */
@@ -109,6 +116,8 @@ struct  thread {
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */
+	struct list fd_list;	// 현재 프로세스가 열어둔 파일 목록
+	int next_fd;	// Open 때 줄 번호
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
