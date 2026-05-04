@@ -105,6 +105,25 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	}
 	
+	case SYS_CLOSE: {
+		int fd = (int) f->R.rdi;
+		struct list_elem *e;
+		for (e = list_begin(&t->fd_list);
+			 e != list_end(&t->fd_list);
+			 e = list_next(e)) {
+			struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+			if (entry->fd == fd) {
+				lock_acquire(&filesys_lock);
+				file_close(entry->file);
+				lock_release(&filesys_lock);
+				list_remove(&entry->elem);
+				free(entry);
+				break;
+			}
+ 		}
+		break;
+	}
+	
 	case SYS_HALT: {
 		power_off();
 	}
