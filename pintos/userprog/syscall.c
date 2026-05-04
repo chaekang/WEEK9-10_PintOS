@@ -45,24 +45,28 @@ syscall_handler (struct intr_frame *f) {
 
 	switch (syscall_no) {
 		case SYS_EXIT:
-			int status = f->R.rdi;
-			thread_current()->exit_status = status;
-			f->R.rax = status;
-			thread_exit ();
-			break;
+			{
+				int status = f->R.rdi;
+				thread_current()->exit_status = status;
+				f->R.rax = status;
+				thread_exit ();
+				break;
+			}
 
 		case SYS_WRITE:
-			int fd = f->R.rdi;
-			const void *buffer = f->R.rsi;
-			unsigned size = (unsigned) f->R.rdx;
+			{
+				int fd = f->R.rdi;
+				const void *buffer = f->R.rsi;
+				unsigned size = (unsigned) f->R.rdx;
 
-			if (fd == 1) {
-				putbuf(buffer, size);
-				f->R.rax = size;
-			} else {
-				f->R.rax = -1;
+				if (fd == 1) {
+					putbuf(buffer, size);
+					f->R.rax = size;
+				} else {
+					f->R.rax = -1;
+				}
+				break;
 			}
-			break;
 		
 		default:
 			break;
