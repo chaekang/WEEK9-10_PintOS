@@ -48,21 +48,24 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 	switch (f->R.rax)
 	{
-	case SYS_EXIT:
+	case SYS_EXIT: {
 		uint64_t status = f->R.rdi;
-		t->exit_status = status;
+		//t->exit_status = status;
 		thread_exit ();
 		break;
+	}
 
-	case SYS_WRITE:
+	case SYS_WRITE: {
 		if ((int) f->R.rdi == 1) {
 			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
 			f->R.rax = f->R.rdx;
 		}
 		break;
+	}
 	
-	case SYS_HALT:
+	case SYS_HALT: {
 		power_off();
+	}
 	
 	default:
 		break;

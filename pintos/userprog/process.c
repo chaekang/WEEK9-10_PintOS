@@ -58,7 +58,6 @@ process_create_initd (const char *file_name) {
 
 	char *tmp = palloc_get_page(0);
 	if (tmp == NULL) {
-		palloc_free_page(tmp);
 		palloc_free_page(fn_copy);
 		return TID_ERROR;
 	}
@@ -271,7 +270,7 @@ process_exit (void) {
 	 * 열린 자원 정리
 	 * 주소 공간 정리
 	*/
-	printf ("%s: exit(%d)\n", thread_name(), curr->exit_status);
+	printf ("%s: exit(%d)\n", thread_name(), (int) curr->exit_status);
 	exit_status = curr->exit_status;
 	sema_up(&wait_sema);
 	
