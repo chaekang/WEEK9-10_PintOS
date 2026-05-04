@@ -7,6 +7,7 @@
 #include "userprog/gdt.h"
 #include "userprog/process.h"
 #include "threads/flags.h"
+#include "threads/init.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -59,6 +60,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = f->R.rdx;
 		}
 		break;
+	
+	case SYS_HALT:
+		power_off();
 	
 	default:
 		break;
