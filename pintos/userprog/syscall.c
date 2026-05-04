@@ -5,7 +5,9 @@
 #include "threads/thread.h"
 #include "threads/loader.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include "threads/flags.h"
+#include "threads/init.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -68,5 +70,4 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	default:
 		break;
 	}
-
 }
