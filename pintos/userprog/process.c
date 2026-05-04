@@ -493,12 +493,6 @@ load (const char *file_name, struct intr_frame *if_) {
 		memcpy((void *)if_->rsp, &arg_addr[i], sizeof(arg_addr[i]));
 	}
 
-	// argv 시작주소값을 메모리에 푸시
-	uintptr_t argv_start_addr = if_->rsp;
-	if_->rsp -= sizeof(uintptr_t);
-	memcpy((void *)if_->rsp, &argv_start_addr, sizeof(argv_start_addr));
-	// *(uintptr_t *) if_->rsp = argv_start_addr;
-
 	// argc 값을 메모리에 푸시
 	if_->rsp -= sizeof(uintptr_t);
 	memcpy((void *)if_->rsp, &argc, sizeof(argc));
