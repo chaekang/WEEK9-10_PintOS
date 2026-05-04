@@ -437,23 +437,49 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* TODO: Your code goes here.
 	/* TODO: Implement argument passing (see project2/argument_passing.html). */
 	/* 스택에 토큰 올리기 */
-	// 스택 맨 위 문자열 삽입
-	while (argv[i] != NULL) {
-		size_t str_len = strnlen(argv[i]);
+	// 스택 맨 위에 명령줄 문자열 삽입한다
+	char *arg_addr[64];
+	int j = 0;
+
+	while (argv[j] != NULL) {
+		size_t str_len = strlen(argv[j]) + 1;
+
 		if_->rsp -= str_len;
-		if_rsp = argv[i];
-		i++;
+		memcpy((void *)if_->rsp, argv[j], str_len);
+
+		arg_addr[j] = (char *)if_->rsp;
+		j++;
 	}
-	
+
+	// 스택 주소 시작점을 word 크기로 정렬한다
+	while (if_->rsp % 8 != 0) {
+		if_->rsp--;
+		*(uint8_t *)if_->rsp = 0;
+	}
+
 	// 맨 처음 NULL 삽입
 	if_->rsp -= 8;
+	char *null_ptr = NULL;
+	memcpy((void *)if_->rsp, &null_ptr, sizeof(null_ptr));
+
 
 	// rsp를 늘리고 agrv 역순으로 삽입 반복 until argc == 0
-	size_t token_len = sizeof(argv[i]);
-	if_->rsp -= token_len;
-	memcpy((void *) if_->rsp, &argv[i], token_len);
-	// 마지막에 가짜 return 주소 삽입
+	while (j > 0) {
+		j--;
+		if_->rsp -= 8;
+		memcpy((void *)if_->rsp, &arg_addr[j], sizeof(arg_addr[j]));
+	}
 
+	// argv 시작 주소
+	char **argv_addr = (char **) if_->rsp;
+
+	// 마지막에 가짜 return 주소 삽입
+	char *fake_rex = 0;
+	if_->rsp -= sizeof(fake_rex);
+	memcpy((void *)if_->rsp, &fake_rex, sizeof(fake_rex));
+
+	if_->R.rdi = argc;
+	if_->R.rsi = argv_addr;
 	success = true;
 
 done:
