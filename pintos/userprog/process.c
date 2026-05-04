@@ -382,6 +382,9 @@ load (const char *file_name, struct intr_frame *if_) {
 	argv[argc] = NULL;
 	arg_addr[argc] = 0;
 
+	/* 유저 프로세스 스레드 이름 파싱 */
+	strlcpy(thread_current()->name, argv[0], sizeof thread_current()->name);
+
 	/* Open executable file. */
 	file = filesys_open (argv[0]);
 	if (file == NULL) {
