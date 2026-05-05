@@ -67,11 +67,6 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	}
 
-	if (!waited) {
-		sema_init(&wait_sema, 0);
-		waited = true;
-	}
-
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (tmp, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -220,16 +215,40 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* 먼저 현재 문맥을 정리한다. */
-	process_cleanup ();
+	/* 
+	 * 문맥 정리 후 적재하면 load 실패 시 데이터 손실 발생
+	 * load 되는지 확인 후, 문맥 정리
+	 * 
+	 * 기존 pml4 저장
+	 * load 시도
+	 * 실패 시 기존 pml4 복구, 새로 만든 pml4 폐기
+	 * 성공하면 기존 pml4 폐기, do_iret()
+	*/
+
+	struct thread *current = thread_current();
+	uint64_t *old_pml4 = current->pml4;
 
 	/* 그다음 바이너리를 적재한다. */
 	success = load (file_name, &_if);
 
 	/* 적재에 실패하면 종료한다. */
 	palloc_free_page (file_name);
-	if (!success)
+	if (!success) {
+		uint64_t *new_pml4 = current->pml4;
+		current->pml4 = old_pml4;
+
+		process_activate(current);
+
+		if (new_pml4 != NULL) {
+			pml4_destroy(new_pml4);
+		}
+
 		return -1;
+	}
+
+	if (old_pml4 != NULL) {
+		pml4_destroy(old_pml4);
+	}
 
 	/* 전환된 프로세스를 시작한다. */
 	do_iret (&_if);
@@ -258,7 +277,6 @@ process_wait (tid_t child_tid) {
 	 * child 상태 리스트에서 제거 및 해제
 	 * exit_status 반환
 	*/
-
 
 	struct thread *cur = thread_current();
 	struct list *child_list = &cur->child_list;

@@ -8,6 +8,7 @@
 #include "userprog/process.h"
 #include "threads/flags.h"
 #include "threads/init.h"
+#include "threads/palloc.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -65,6 +66,29 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	
 	case SYS_HALT: {
 		power_off();
+	}
+
+	case SYS_EXEC: {
+		/*
+		 * cmd_line 유효성 확인
+		 * 커널 페이지 하나 할당
+		 * 사용자 문자열을 kbuf로 복사
+		 * 실패 시 -1 반환
+		 * 성공하면 process_exec()
+		*/
+
+		const char *cmd_line = (const char *)f->R.rdi;
+		char *kbuf;
+
+		kbuf = palloc_get_page(0);
+		if (kbuf == NULL) {
+			f->R.rax = -1;
+			break;
+		}
+
+		strlcpy(kbuf, cmd_line, PGSIZE);
+		f->R.rax = process_exec(kbuf);
+		break;
 	}
 	
 	default:
