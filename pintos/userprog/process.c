@@ -50,6 +50,7 @@ process_init (void) {
 	struct thread *current = thread_current ();
 
 	list_init(&current->child_list);
+	current->exec_file = NULL;
 }
 
 /* FILE_NAME에서 읽어들인 첫 번째 사용자 영역 프로그램 "initd"를 시작한다.
@@ -357,6 +358,11 @@ process_exit (void) {
 		sema_up(&child->wait_sema);
 	}
 
+	if (curr->exec_file != NULL) {
+		file_close(curr->exec_file);
+		curr->exec_file = NULL;
+	}
+
 	process_cleanup ();
 }
 
@@ -502,6 +508,8 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	file_deny_write(file);
+
 	/* 실행 파일 헤더를 읽고 검증한다. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -629,6 +637,16 @@ done:
 		file_close (file);
 	}
 	palloc_free_page(file_name_copy);
+
+	if (success) {
+		if (t->exec_file != NULL) {
+			file_close(t->exec_file);
+		}
+
+		t->exec_file = file;
+		file = NULL;
+	}
+
 	return success;
 }
 
