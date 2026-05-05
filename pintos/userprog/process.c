@@ -574,8 +574,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* 시작 주소를 설정한다. */
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: Your code goes here.
-	/* TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* Implement argument passing (see project2/argument_passing.html). */
 	/* 스택에 토큰 올리기 */
 	// 스택 맨 위에 명령줄 문자열 삽입한다
 	char *arg_addr[64];
