@@ -9,10 +9,16 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "intrinsic.h"
+#include "devices/input.h"
+#include "filesys/file.h"
+#include "threads/synch.h"
+
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 static struct lock filesys_lock;
+static struct fd_entry *find_fd_entry(int fd);
 
 /* 시스템 호출.
  *
@@ -41,27 +47,32 @@ syscall_init (void) {
 	list_init(&filesys_lock);
 }
 
+
+/* user가 요청한 fd를 읽어 buffer에 내용을 저장 */
 int read(int fd, void *buffer, unsigned size) {
-	//   fd == 1: 실패
-	if (fd == 1) {
+	/* 인자 기본 검사 */
+	if (fd < 0) {
+		return -1;
+	}
+
+	if (fd == 1) { 	// fd == 1: 실패
 		return -1;
 	}
 	// size 검사
 		if (size == 0) {
 		return 0;
 	}
-	// 버퍼 시작 주소 검사
-	if (buffer == NULL) {
+
+	/* buffer 유효성 검사 */
+	if (buffer == NULL) { // 버퍼 시작 주소 검사
 		return exit(-1);
 	}
-	// buffer 전체 범위 유효성 검사
-	char *start = buffer;
+	char *start = buffer; 	// buffer 전체 범위 검사
 	char *end = start + size -1;
 	char *p= buffer;
 
-
 	for (p = start; p <= end; p++) {
-		if (is_user_vaddr(p) && pml4_get_page(thread_current()->pml4, p) ) {
+		if (is_user_vaddr(p) && pml4_get_page(thread_current()->pml4, p) ) { // p가 사용자 주소 범위 안인지 + p가 페이지 테이블에 매핑되어 있는지 검사
 			continue;
 		}
 		else {
@@ -69,18 +80,47 @@ int read(int fd, void *buffer, unsigned size) {
 		}
 	}
 
+	/* 실제 read를 수행 */
+	size_t i;
+	char *buf = buffer;
 
-	// 실제 read 수행
-	//   stdin이면 input_getc로 buffer에 size만큼 쓰기
-	//   file이면 filesys lock 획득 후 file_read
+	if (fd == 0) { // stdin이면 input_getc로 buffer에 size만큼 쓰기
+		for (i=0; i<size; i++) {
+			buf[i] = input_getc();
+		}
+		return size;
+	}
+	if (fd >= 2) {
+		struct fd_entry *entry = find_fd_entry(fd); // file이면 fd로 entry를 찾는다
+		if (entry == NULL || entry->file == NULL) {
+			return -1;
+		}
+		lock_acquire(&filesys_lock); // file이면 filesys lock 획득 후 file_read
+		off_t read_size = file_read(entry->file, buffer, size);
+		lock_release(&filesys_lock); // file이면 filesys lock 해제
 
-	// file이면 filesys lock 해제
-
-	// 읽은 바이트 수 반환
-
-
-
+		return read_size; // 읽은 바이트 수 반환
+	}
 }
+
+/* fd를 받아 fd_entry를 찾아서 반환한다 */
+static struct fd_entry *
+find_fd_entry(int fd) {
+	struct thread *curr = thread_current();
+	struct list_elem *e;
+
+	for (e = list_begin(&curr->fd_list);
+		 e != list_end(&curr->fd_list);
+		 e = list_next(e)) {
+		struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+
+		if (entry->fd == fd) {
+			return entry;
+		}
+	}
+	return NULL;
+}
+
 
 /* 메인 시스템 호출 인터페이스 */
 void
