@@ -26,11 +26,15 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
 
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
 static void
 process_init (void) {
 	struct thread *current = thread_current ();
+
+	list_init(&current->child_list);
+	current->my_status = NULL;
 }
 
 /* FILE_NAME에서 읽어들인 첫 번째 사용자 영역 프로그램 "initd"를 시작한다.
@@ -49,6 +53,18 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
+	char *tmp = palloc_get_page(0);
+	if (tmp == NULL) {
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+
+	if (!parse_filename(file_name, tmp, PGSIZE)) {
+		palloc_free_page(tmp);
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
 
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -172,16 +188,40 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* 먼저 현재 문맥을 정리한다. */
-	process_cleanup ();
+	/* 
+	 * 문맥 정리 후 적재하면 load 실패 시 데이터 손실 발생
+	 * load 되는지 확인 후, 문맥 정리
+	 * 
+	 * 기존 pml4 저장
+	 * load 시도
+	 * 실패 시 기존 pml4 복구, 새로 만든 pml4 폐기
+	 * 성공하면 기존 pml4 폐기, do_iret()
+	*/
+
+	struct thread *current = thread_current();
+	uint64_t *old_pml4 = current->pml4;
 
 	/* 그다음 바이너리를 적재한다. */
 	success = load (file_name, &_if);
 
 	/* 적재에 실패하면 종료한다. */
 	palloc_free_page (file_name);
-	if (!success)
+	if (!success) {
+		uint64_t *new_pml4 = current->pml4;
+		current->pml4 = old_pml4;
+
+		process_activate(current);
+
+		if (new_pml4 != NULL) {
+			pml4_destroy(new_pml4);
+		}
+
 		return -1;
+	}
+
+	if (old_pml4 != NULL) {
+		pml4_destroy(old_pml4);
+	}
 
 	/* 전환된 프로세스를 시작한다. */
 	do_iret (&_if);
@@ -197,11 +237,43 @@ process_exec (void *f_name) {
  *
  * 이 함수는 problem 2-2에서 구현한다. 현재는 아무 일도 하지 않는다. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	return -1;
+
+	struct thread *cur = thread_current();
+	struct list *child_list = &cur->child_list;
+	struct child_status *child = NULL;
+
+	struct list_elem *e;
+	for (e = list_begin(child_list); e != list_end(child_list); e = list_next(e)) {
+		struct child_status *tmp = list_entry(e, struct child_status, elem);
+		if (tmp->tid == child_tid) {
+			child = tmp;
+			break;
+		}
+	}
+
+	if (child == NULL) {
+		return -1;
+	}
+
+	if (child->waited) {
+		return -1;
+	}
+
+	child->waited = true;
+
+	if (!child->exited) {
+		sema_down(&child->wait_sema);
+	}
+	int status = child->exit_status;
+
+	list_remove(&child->elem);
+	free(child);
+
+	return status;
 }
 
 /* 프로세스를 종료한다. 이 함수는 thread_exit()에서 호출된다. */
@@ -212,6 +284,16 @@ process_exit (void) {
 	 * TODO: 프로세스 종료 메시지를 구현한다
 	 * TODO: (project2/process_termination.html 참고).
 	 * TODO: 프로세스 자원 정리도 여기서 구현하는 것을 권장한다. */
+
+	printf ("%s: exit(%d)\n", thread_name(), (int) curr->exit_status);
+	
+	struct child_status *child = curr->my_status;
+
+	if (child != NULL) {
+		child->exit_status = curr->exit_status;
+		child->exited = true;
+		sema_up(&child->wait_sema);
+	}
 
 	process_cleanup ();
 }
@@ -439,6 +521,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	while (argv[j] != NULL) {
 		size_t str_len = strlen(argv[j]) + 1;
+
 
 		if_->rsp -= str_len;
 		memcpy((void *)if_->rsp, argv[j], str_len);

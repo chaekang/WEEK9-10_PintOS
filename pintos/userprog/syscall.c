@@ -8,29 +8,23 @@
 #include "userprog/process.h"
 #include "threads/flags.h"
 #include "threads/init.h"
+#include "threads/palloc.h"
+#include "threads/mmu.h"v
 #include "intrinsic.h"
-<<<<<<< 0505-WEI-read/write
 #include "devices/input.h"
-#include "filesys/file.h"
-#include "threads/synch.h"
-
-
-=======
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
 #include "threads/malloc.h"
->>>>>>> dev
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+static bool copy_in_string (char *buf, const char *command, size_t size);
 static struct lock filesys_lock;
-<<<<<<< 0505-WEI-read/write
 static struct fd_entry *find_fd_entry(int fd);
-=======
->>>>>>> dev
 
 /* 시스템 호출.
  *
@@ -57,7 +51,6 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 	lock_init(&filesys_lock);
-<<<<<<< 0505-WEI-read/write
 }
 
 
@@ -133,8 +126,6 @@ find_fd_entry(int fd) {
 		}
 	}
 	return NULL;
-=======
->>>>>>> dev
 }
 
 
@@ -149,7 +140,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	{
 	case SYS_EXIT: {
 		uint64_t status = f->R.rdi;
-		//t->exit_status = status;
+		t->exit_status = status;
 		thread_exit ();
 		break;
 	}
@@ -226,30 +217,62 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_HALT: {
 		power_off();
 	}
+
+	case SYS_WAIT: {
+		tid_t child_tid = (tid_t)f->R.rdi;
+		f->R.rax = process_wait(child_tid);
+		break;
+	}
+
+	case SYS_EXEC: {
+		const char *cmd_line = (const char *)f->R.rdi;
+		char *kbuf;
+
+		kbuf = palloc_get_page(0);
+		if (kbuf == NULL) {
+			f->R.rax = -1;
+			break;
+		}
+
+		if (!copy_in_string(kbuf, cmd_line, PGSIZE)) {
+			palloc_free_page(kbuf);
+			t->exit_status = -1;
+    		thread_exit();
+		}
+
+		f->R.rax = process_exec(kbuf);
+		break;
+	}
 	
 	default:
 		break;
 	}
 }
 
-/*
-포인터가 null 이거나 커널 주소거나 매핑 안 된 주소면 커널이 터질 수 있음
-문자열 포인터가 유효한지 검사하는 함수
-*/
-static void check_user_string(const char *s) {
-	struct thread *cur = thread_current();
-	if (s == NULL) {
-		cur->exit_status = -1;
-		thread_exit();
+static bool copy_in_string (char *buf, const char *command, size_t size) {
+    size_t i;
+    struct thread *t = thread_current ();
+
+    if (command == NULL) {
+        return false;
 	}
-	while (true) {
-		if (!is_user_vaddr(s) || pml4_get_page(cur->pml4, s) == NULL) {
-			cur->exit_status = -1;
-			thread_exit();
+
+    for (i = 0; i < size; i++) {
+        const char *uaddr = command + i;
+
+        if (!is_user_vaddr (uaddr)) {
+            return false;
 		}
-		if (*s == '\0') {
-			break;
+        if (pml4_get_page(t->pml4, uaddr) == NULL) {
+            return false;
 		}
-		s++;
-	}
+
+        buf[i] = *uaddr;
+        if (buf[i] == '\0') {
+            return true;
+		}
+    }
+
+    buf[size - 1] = '\0';
+    return true;
 }

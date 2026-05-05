@@ -5,6 +5,9 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#ifdef USERPROG
+struct child_status;
+#endif
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -89,10 +92,6 @@ struct fd_entry {
 	struct list_elem elem;     /* fd_list에 연결되기 위한 노드 */
 };
 
-<<<<<<< 0505-WEI-read/write
-=======
-
->>>>>>> dev
 struct  thread {
 	/* `thread.c`가 관리한다. */
 	tid_t tid;                          /* 스레드 식별자. */
@@ -120,8 +119,12 @@ struct  thread {
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */
+
+	struct list child_list;             /* 자식 스레드 리스트 */
+	struct child_status *my_status;      /* 본인의 스레드 상태 */
 	struct list fd_list;	// 현재 프로세스가 열어둔 파일 목록
 	int next_fd;	// Open 때 줄 번호
+
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
