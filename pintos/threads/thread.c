@@ -230,7 +230,9 @@ tid_t thread_create(const char *name, int priority,
 	if (t != thread_current()) {
 		t->nice = thread_current()->nice;
 		t->recent_cpu = thread_current()->recent_cpu;
+		if (thread_mlfqs) {
 		update_priority(t);
+		}
 	}
 
 	list_push_back(&all_list, &t->allelem);
