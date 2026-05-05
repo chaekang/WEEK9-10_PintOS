@@ -208,6 +208,21 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	}
 	
+	case SYS_SEEK: {
+		int fd = (int)f->R.rdi;
+		unsigned position = (unsigned)f->R.rsi;
+		struct fd_entry *entry = find_fd_entry(fd);
+
+		if (entry == NULL || entry->file == NULL) {
+			break;
+		}
+
+		lock_acquire(&filesys_lock);
+		file_seek(entry->file, position);
+		lock_release(&filesys_lock);
+		break;
+	}
+	
 	case SYS_CLOSE: {
 		int fd = (int) f->R.rdi;
 		struct list_elem *e;
