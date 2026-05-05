@@ -70,15 +70,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		power_off();
 	}
 
-	case SYS_EXEC: {
-		/*
-		 * cmd_line 유효성 확인
-		 * 커널 페이지 하나 할당
-		 * 사용자 문자열을 kbuf로 복사
-		 * 실패 시 -1 반환
-		 * 성공하면 process_exec()
-		*/
+	case SYS_WAIT: {
+		tid_t child_tid = (tid_t)f->R.rdi;
+		f->R.rax = process_wait(child_tid);
+		break;
+	}
 
+	case SYS_EXEC: {
 		const char *cmd_line = (const char *)f->R.rdi;
 		char *kbuf;
 
@@ -107,20 +105,24 @@ static bool copy_in_string (char *buf, const char *command, size_t size) {
     size_t i;
     struct thread *t = thread_current ();
 
-    if (command == NULL)
+    if (command == NULL) {
         return false;
+	}
 
     for (i = 0; i < size; i++) {
         const char *uaddr = command + i;
 
-        if (!is_user_vaddr (uaddr))
+        if (!is_user_vaddr (uaddr)) {
             return false;
-        if (pml4_get_page(t->pml4, uaddr) == NULL)
+		}
+        if (pml4_get_page(t->pml4, uaddr) == NULL) {
             return false;
+		}
 
         buf[i] = *uaddr;
-        if (buf[i] == '\0')
+        if (buf[i] == '\0') {
             return true;
+		}
     }
 
     buf[size - 1] = '\0';
