@@ -269,6 +269,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		}
 
 		f->R.rax = process_exec(kbuf);
+		if (f->R.rax == -1) {
+			t->exit_status = -1;
+			thread_exit();
+		}
 		break;
 	}
 	

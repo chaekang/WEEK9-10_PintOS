@@ -644,6 +644,7 @@ done:
 	else {
 		if (file != NULL) {
 			file_close (file);
+			t->exit_status = -1;
 		}
 	}
 	palloc_free_page(file_name_copy);
