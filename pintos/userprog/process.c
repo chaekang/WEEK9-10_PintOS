@@ -17,6 +17,7 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -27,6 +28,15 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
+
+struct child_status {
+	tid_t tid;                     /* 자식 스레드 tid */
+	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
+	bool exited;                   /* 자식이 종료했는지 여부 */
+	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
+	struct list_elem elem;         /* child list 리스트 노드 */
+};
 
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
 static void
@@ -85,6 +95,19 @@ initd (void *f_name) {
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED ();
+}
+
+static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size) {
+	if (tmp == NULL || file_name == NULL) {
+		return false;
+	}
+
+	strlcpy(tmp, file_name, tmp_size);
+
+	char *save_token;
+	char *token = strtok_r(tmp, " ", &save_token);
+	
+	return token != NULL;
 }
 
 /* 현재 프로세스를 `name`이라는 이름으로 복제한다. 성공하면 새 프로세스의

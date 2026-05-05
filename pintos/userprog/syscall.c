@@ -71,7 +71,8 @@ int read(int fd, void *buffer, unsigned size) {
 
 	/* buffer 유효성 검사 */
 	if (buffer == NULL) { // 버퍼 시작 주소 검사
-		return exit(-1);
+		//return exit(-1);
+		return -1;
 	}
 	char *start = buffer; 	// buffer 전체 범위 검사
 	char *end = start + size -1;
@@ -82,7 +83,8 @@ int read(int fd, void *buffer, unsigned size) {
 			continue;
 		}
 		else {
-			return exit(-1); // exit syscall 구현 에정
+			//return exit(-1); // exit syscall 구현 에정
+			return -1;
 		}
 	}
 
