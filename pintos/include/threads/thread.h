@@ -89,7 +89,10 @@ struct fd_entry {
 	struct list_elem elem;     /* fd_list에 연결되기 위한 노드 */
 };
 
+<<<<<<< 0505-WEI-read/write
+=======
 
+>>>>>>> dev
 struct  thread {
 	/* `thread.c`가 관리한다. */
 	tid_t tid;                          /* 스레드 식별자. */
