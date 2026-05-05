@@ -633,11 +633,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	if (file != NULL) {
-		file_close (file);
-	}
-	palloc_free_page(file_name_copy);
-
 	if (success) {
 		if (t->exec_file != NULL) {
 			file_close(t->exec_file);
@@ -646,7 +641,12 @@ done:
 		t->exec_file = file;
 		file = NULL;
 	}
-
+	else {
+		if (file != NULL) {
+			file_close (file);
+		}
+	}
+	palloc_free_page(file_name_copy);
 	return success;
 }
 
