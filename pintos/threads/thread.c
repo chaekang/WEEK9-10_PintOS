@@ -627,6 +627,10 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
 
+	list_init(&t->fd_table);
+	t->next_fd = 2;
+	t->exit_status = 0;
+
 	t->nice = 0;
 	t->recent_cpu = 0;
 

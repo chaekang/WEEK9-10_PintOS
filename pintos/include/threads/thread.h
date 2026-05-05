@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "filesys/file.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -104,11 +105,12 @@ struct  thread {
 	struct list_elem elem;              /* 리스트 원소. */
 	struct list_elem allelem;           /* 전체 리스트용 원소 */
 
-	uint64_t exit_status;               /* 종료 코드 */
-
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */
+	struct list fd_table;         	   /* 파일 디스크립터 테이블 */
+	int next_fd;						/* 다음에 배정할 fd entry의 fd 넘버 */
+	uint64_t exit_status;               /* 종료 코드 */
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
@@ -118,6 +120,12 @@ struct  thread {
 	/* `thread.c`가 관리한다. */
 	struct intr_frame tf;               /* 문맥 전환용 정보. */
 	unsigned magic;                     /* 스택 오버플로를 감지한다. */
+};
+
+struct fd_entry {
+	int fd;
+	struct file *file;
+	struct list_elem elem;
 };
 
 /* 고정소수점 */
