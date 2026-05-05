@@ -9,7 +9,7 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/palloc.h"
-#include "threads/mmu.h"v
+#include "threads/mmu.h"
 #include "intrinsic.h"
 #include "devices/input.h"
 #include "filesys/filesys.h"
@@ -25,6 +25,10 @@ void syscall_handler (struct intr_frame *);
 static bool copy_in_string (char *buf, const char *command, size_t size);
 static struct lock filesys_lock;
 static struct fd_entry *find_fd_entry(int fd);
+static void validate_user_ptr(const void *ptr);
+static void validate_user_buffer(const void *buffer, size_t size);
+static void validate_user_string(const char *str);
+static void kill_process_due_to_bad_user_memory(void);
 
 /* 시스템 호출.
  *
@@ -69,24 +73,7 @@ int read(int fd, void *buffer, unsigned size) {
 		return 0;
 	}
 
-	/* buffer 유효성 검사 */
-	if (buffer == NULL) { // 버퍼 시작 주소 검사
-		//return exit(-1);
-		return -1;
-	}
-	char *start = buffer; 	// buffer 전체 범위 검사
-	char *end = start + size -1;
-	char *p= buffer;
-
-	for (p = start; p <= end; p++) {
-		if (is_user_vaddr(p) && pml4_get_page(thread_current()->pml4, p) ) { // p가 사용자 주소 범위 안인지 + p가 페이지 테이블에 매핑되어 있는지 검사
-			continue;
-		}
-		else {
-			//return exit(-1); // exit syscall 구현 에정
-			return -1;
-		}
-	}
+	validate_user_buffer(buffer, size);
 
 	/* 실제 read를 수행 */
 	size_t i;
@@ -150,6 +137,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_CREATE: {
 		const char *file = (const char *) f->R.rdi;
 		unsigned size = f->R.rsi;
+		validate_user_string(file);
 		lock_acquire(&filesys_lock);
 		bool result = filesys_create(file, size);
 		lock_release(&filesys_lock);
@@ -159,6 +147,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 	case SYS_OPEN: {
 		const char *file = (const char *) f->R.rdi;
+		validate_user_string(file);
 		lock_acquire(&filesys_lock);
 		struct file *opened = filesys_open(file);
 		lock_release(&filesys_lock);
@@ -182,9 +171,31 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	}
 
 	case SYS_WRITE: {
-		if ((int) f->R.rdi == 1) {
-			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
-			f->R.rax = f->R.rdx;
+		int fd = (int) f->R.rdi;
+		const void *buffer = (const void *) f->R.rsi;
+		size_t size = (size_t) f->R.rdx;
+
+		if (size == 0) {
+			f->R.rax = 0;
+			break;
+		}
+
+		if (fd == 1) {
+			validate_user_buffer(buffer, size);
+			putbuf(buffer, size);
+			f->R.rax = size;
+		} else if (fd >= 2) {
+			struct fd_entry *entry = find_fd_entry(fd);
+			if (entry == NULL || entry->file == NULL) {
+				f->R.rax = -1;
+				break;
+			}
+			validate_user_buffer(buffer, size);
+			lock_acquire(&filesys_lock);
+			f->R.rax = file_write(entry->file, buffer, size);
+			lock_release(&filesys_lock);
+		} else {
+			f->R.rax = -1;
 		}
 		break;
 	}
@@ -275,6 +286,46 @@ static bool copy_in_string (char *buf, const char *command, size_t size) {
 		}
     }
 
-    buf[size - 1] = '\0';
-    return true;
+    return false;
+}
+
+static void
+validate_user_ptr(const void *ptr) {
+	struct thread *cur = thread_current();
+
+	if (ptr == NULL || !is_user_vaddr(ptr) ||
+			pml4_get_page(cur->pml4, ptr) == NULL) {
+		kill_process_due_to_bad_user_memory();
+	}
+}
+
+static void
+validate_user_buffer(const void *buffer, size_t size) {
+	const uint8_t *p = buffer;
+
+	if (size == 0) {
+		return;
+	}
+	for (size_t i = 0; i < size; i++) {
+		validate_user_ptr(p + i);
+	}
+}
+
+static void
+validate_user_string(const char *str) {
+	const char *p = str;
+
+	while (true) {
+		validate_user_ptr(p);
+		if (*p == '\0') {
+			return;
+		}
+		p++;
+	}
+}
+
+static void
+kill_process_due_to_bad_user_memory(void) {
+	thread_current()->exit_status = -1;
+	thread_exit();
 }

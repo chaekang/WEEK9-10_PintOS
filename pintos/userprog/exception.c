@@ -77,9 +77,7 @@ kill (struct intr_frame *f) {
 		case SEL_UCSEG:
 			/* 사용자 코드 세그먼트이므로 예상대로 사용자 예외다. 사용자
 			   프로세스를 종료한다. */
-			printf ("%s: dying due to interrupt %#04llx (%s).\n",
-					thread_name (), f->vec_no, intr_name (f->vec_no));
-			intr_dump_frame (f);
+			thread_current()->exit_status = -1;
 			thread_exit ();
 
 		case SEL_KCSEG:
@@ -139,12 +137,6 @@ page_fault (struct intr_frame *f) {
 	/* 페이지 폴트 수를 센다. */
 	page_fault_cnt++;
 
-	/* 실제 폴트라면 정보를 출력하고 종료한다. */
-	printf ("Page fault at %p: %s error %s page in %s context.\n",
-			fault_addr,
-			not_present ? "not present" : "rights violation",
-			write ? "writing" : "reading",
-			user ? "user" : "kernel");
+	/* 실제 폴트라면 종료한다. */
 	kill (f);
 }
-
