@@ -9,10 +9,12 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/palloc.h"
+#include "threads/mmu.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+static bool copy_in_string (char *buf, const char *command, size_t size);
 
 /* 시스템 호출.
  *
@@ -86,7 +88,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		}
 
-		strlcpy(kbuf, cmd_line, PGSIZE);
+		if (!copy_in_string(kbuf, cmd_line, PGSIZE)) {
+			palloc_free_page(kbuf);
+			t->exit_status = -1;
+    		thread_exit();
+		}
+
 		f->R.rax = process_exec(kbuf);
 		break;
 	}
@@ -94,4 +101,28 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	default:
 		break;
 	}
+}
+
+static bool copy_in_string (char *buf, const char *command, size_t size) {
+    size_t i;
+    struct thread *t = thread_current ();
+
+    if (command == NULL)
+        return false;
+
+    for (i = 0; i < size; i++) {
+        const char *uaddr = command + i;
+
+        if (!is_user_vaddr (uaddr))
+            return false;
+        if (pml4_get_page(t->pml4, uaddr) == NULL)
+            return false;
+
+        buf[i] = *uaddr;
+        if (buf[i] == '\0')
+            return true;
+    }
+
+    buf[size - 1] = '\0';
+    return true;
 }
