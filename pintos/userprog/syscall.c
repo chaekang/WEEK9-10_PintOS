@@ -44,7 +44,7 @@ syscall_init (void) {
 	 * FLAG_FL을 마스킹한다. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
-	list_init(&filesys_lock);
+	lock_init(&filesys_lock);
 }
 
 
@@ -101,6 +101,7 @@ int read(int fd, void *buffer, unsigned size) {
 
 		return read_size; // 읽은 바이트 수 반환
 	}
+	return -1;
 }
 
 /* fd를 받아 fd_entry를 찾아서 반환한다 */
@@ -143,6 +144,14 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
 			f->R.rax = f->R.rdx;
 		}
+		break;
+	}
+
+	case SYS_READ: {
+		/* read(fd, buffer, size)의 인자는 syscall_entry가 저장한 레지스터에서
+		 * 꺼낸다. rdi는 fd, rsi는 사용자 버퍼 주소, rdx는 읽을 바이트 수다.
+		 * 시스템 콜 반환값도 rax로 돌아가므로 read() 결과를 f->R.rax에 저장한다. */
+		f->R.rax = read((int) f->R.rdi, (void *) f->R.rsi, (unsigned) f->R.rdx);
 		break;
 	}
 	
