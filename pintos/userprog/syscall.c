@@ -9,16 +9,28 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "intrinsic.h"
+<<<<<<< 0505-WEI-read/write
 #include "devices/input.h"
 #include "filesys/file.h"
 #include "threads/synch.h"
 
 
+=======
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "threads/synch.h"
+#include "threads/vaddr.h"
+#include "threads/mmu.h"
+#include "threads/malloc.h"
+>>>>>>> dev
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 static struct lock filesys_lock;
+<<<<<<< 0505-WEI-read/write
 static struct fd_entry *find_fd_entry(int fd);
+=======
+>>>>>>> dev
 
 /* 시스템 호출.
  *
@@ -45,6 +57,7 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 	lock_init(&filesys_lock);
+<<<<<<< 0505-WEI-read/write
 }
 
 
@@ -120,6 +133,8 @@ find_fd_entry(int fd) {
 		}
 	}
 	return NULL;
+=======
+>>>>>>> dev
 }
 
 
@@ -139,6 +154,40 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	}
 
+	case SYS_CREATE: {
+		const char *file = (const char *) f->R.rdi;
+		unsigned size = f->R.rsi;
+		lock_acquire(&filesys_lock);
+		bool result = filesys_create(file, size);
+		lock_release(&filesys_lock);
+		f->R.rax = result;
+		break;
+	}
+
+	case SYS_OPEN: {
+		const char *file = (const char *) f->R.rdi;
+		lock_acquire(&filesys_lock);
+		struct file *opened = filesys_open(file);
+		lock_release(&filesys_lock);
+		if (opened == NULL) {
+			f->R.rax = -1;
+			break;
+		}
+		struct fd_entry *entry = malloc(sizeof *entry);
+		if (entry == NULL) {
+			file_close(opened);
+			f->R.rax = -1;
+			break;
+		}
+		entry->fd = t->next_fd;
+		entry->file = opened;
+		t->next_fd ++;
+		list_push_back(&t->fd_list, &entry->elem);
+		f->R.rax = entry->fd;
+		break;
+
+	}
+
 	case SYS_WRITE: {
 		if ((int) f->R.rdi == 1) {
 			putbuf((const char *) f->R.rsi, (size_t) f->R.rdx);
@@ -155,11 +204,52 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		break;
 	}
 	
+	case SYS_CLOSE: {
+		int fd = (int) f->R.rdi;
+		struct list_elem *e;
+		for (e = list_begin(&t->fd_list);
+			 e != list_end(&t->fd_list);
+			 e = list_next(e)) {
+			struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+			if (entry->fd == fd) {
+				lock_acquire(&filesys_lock);
+				file_close(entry->file);
+				lock_release(&filesys_lock);
+				list_remove(&entry->elem);
+				free(entry);
+				break;
+			}
+ 		}
+		break;
+	}
+	
 	case SYS_HALT: {
 		power_off();
 	}
 	
 	default:
 		break;
+	}
+}
+
+/*
+포인터가 null 이거나 커널 주소거나 매핑 안 된 주소면 커널이 터질 수 있음
+문자열 포인터가 유효한지 검사하는 함수
+*/
+static void check_user_string(const char *s) {
+	struct thread *cur = thread_current();
+	if (s == NULL) {
+		cur->exit_status = -1;
+		thread_exit();
+	}
+	while (true) {
+		if (!is_user_vaddr(s) || pml4_get_page(cur->pml4, s) == NULL) {
+			cur->exit_status = -1;
+			thread_exit();
+		}
+		if (*s == '\0') {
+			break;
+		}
+		s++;
 	}
 }
