@@ -112,7 +112,7 @@ struct  thread {
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */
 	struct list fd_table;         	   /* 파일 디스크립터 테이블 */
 	int next_fd;						/* 다음에 배정할 fd entry의 fd 넘버 */
-	uint64_t exit_status;               /* 종료 코드 */
+	int exit_status;               /* 종료 코드 */
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
