@@ -310,6 +310,7 @@ process_wait (tid_t child_tid) {
 	free(child);
 
 	return status;
+
 }
 
 /* 프로세스를 종료한다. 이 함수는 thread_exit()에서 호출된다. */
@@ -569,6 +570,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	while (argv[j] != NULL) {
 		size_t str_len = strlen(argv[j]) + 1;
+
 
 		if_->rsp -= str_len;
 		memcpy((void *)if_->rsp, argv[j], str_len);
