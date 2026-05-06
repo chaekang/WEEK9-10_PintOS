@@ -56,14 +56,6 @@ struct initd_aux {
 	struct child_status *child_status;
 };
 
-struct fork_aux {
-	struct thread *parent;
-	struct intr_frame parent_if;
-	struct child_status *child;
-	struct semaphore done_sema;
-	bool success;
-};
-
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
 static void
 process_init (void) {
@@ -133,7 +125,6 @@ process_create_initd (const char *file_name) {
 	if (tid == TID_ERROR) {
 		free(aux);
 		free(child);
-		palloc_free_page(tmp);
 		palloc_free_page (fn_copy);
 		return TID_ERROR;
 	}
@@ -200,19 +191,19 @@ process_fork (const char *name, struct intr_frame *if_) {
 	sema_init(&aux->fork_sema, 0);
 
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
-  palloc_free_page((void *)name);
-	
-  if (tid == TID_ERROR) {
+	palloc_free_page((void *)name);
+		
+	if (tid == TID_ERROR) {
 		free(aux);
 		free(child);
 		return TID_ERROR;
 	}
-  
+	  
 	child->tid = tid;
 	list_push_back(&cur->child_list, &child->elem);
 	sema_down(&aux->fork_sema);
-	
-  if (!aux->success) {
+		
+	if (!aux->success) {
 		list_remove(&child->elem);
 		child_status_release(child);
 		free(aux);
@@ -231,7 +222,7 @@ static struct child_status *child_status_create(void) {
 	child->exit_status = 0;
 	child->exited = false;
 	child->waited = false;
-  child->ref_cnt = 2;
+	child->ref_cnt = 2;
 	lock_init(&child->lock);
 	sema_init(&child->wait_sema, 0);
 
@@ -288,14 +279,12 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       즉, process_fork의 두 번째 인자를 이 함수로 전달해야 한다. */
 static void
 __do_fork (void *aux_) {
-	struct fork_aux *aux = aux_;
 	struct intr_frame if_;
-	struct fork_aux *parent_aux = aux;
+	struct fork_aux *parent_aux = aux_;
 	struct thread *current = thread_current ();
 	struct thread *parent = parent_aux->parent;
 	struct child_status *status = parent_aux->child_status;
 
-	process_init();
 	current->my_status = status;
 
 	/* 1. CPU 문맥을 로컬 스택으로 읽어온다. */
@@ -341,11 +330,17 @@ __do_fork (void *aux_) {
 		list_push_back(&current->fd_list, &child_entry->elem);
 	}
 
+	if (parent->exec_file != NULL) {
+		current->exec_file = file_duplicate(parent->exec_file);
+		if (current->exec_file == NULL) {
+			goto error;
+		}
+	}
+
 	parent_aux->success = true;
 	sema_up(&parent_aux->fork_sema);
 	do_iret (&if_);
 error:
-	current->my_status = NULL;
 	parent_aux->success = false;
 	sema_up(&parent_aux->fork_sema);
 	thread_exit ();
@@ -512,11 +507,6 @@ process_exit (void) {
 
 	if (curr->exec_file != NULL) {
 		file_allow_write(curr->exec_file);
-		file_close(curr->exec_file);
-		curr->exec_file = NULL;
-	}
-
-	if (curr->exec_file != NULL) {
 		file_close(curr->exec_file);
 		curr->exec_file = NULL;
 	}
@@ -813,22 +803,12 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	if (success) {
-		if (t->exec_file != NULL) {
-			file_close(t->exec_file);
-		}
-
-		t->exec_file = file;
-		file = NULL;
+	if (!success && file != NULL) {
+		file_close (file);
 	}
-	else {
-		if (file != NULL) {
-			file_close (file);
-			t->exit_status = -1;
-		}
+	if (file_name_copy != NULL) {
+		palloc_free_page(file_name_copy);
 	}
-
-	palloc_free_page(file_name_copy);
 	return success;
 }
 
