@@ -238,6 +238,26 @@ __do_fork (void *aux) {
 		goto error;
 #endif
 
+	current->next_fd = parent->next_fd;
+	struct list_elem *e;
+	for (e = list_begin(&parent->fd_list);
+		 e != list_end(&parent->fd_list);
+		 e = list_next(e)) {
+		struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+		struct fd_entry *child_entry = malloc(sizeof *child_entry);
+		if (child_entry == NULL) {
+			goto error;
+		}
+		struct file *file = file_duplicate(entry->file);
+		if (file == NULL) {
+			free(child_entry);
+			goto error;
+		}
+		child_entry->fd = entry->fd;
+		child_entry->file = file;
+		list_push_back(&current->fd_list, &child_entry->elem);
+	}
+
 	status->success = true;
 	sema_up(&status->fork_sema);
 	free(parent_aux);

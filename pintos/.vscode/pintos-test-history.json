@@ -16,8 +16,8 @@
       "last_action": "run"
     },
     "tests/threads/alarm-priority": {
-      "count": 2,
-      "last_used": 1777461951.746,
+      "count": 3,
+      "last_used": 1777977529.174,
       "last_action": "run"
     },
     "tests/threads/alarm-zero": {
@@ -133,6 +133,43 @@
     "tests/threads/mlfqs/mlfqs-block": {
       "count": 2,
       "last_used": 1777461951.746,
+      "last_action": "run"
+    }
+  },
+  "userprog": {
+    "tests/userprog/create-normal": {
+      "count": 1,
+      "last_used": 1777977529.176,
+      "last_action": "run"
+    },
+    "tests/userprog/create-empty": {
+      "count": 1,
+      "last_used": 1777977529.176,
+      "last_action": "run"
+    },
+    "tests/userprog/create-null": {
+      "count": 1,
+      "last_used": 1777977529.176,
+      "last_action": "run"
+    },
+    "tests/userprog/create-bad-ptr": {
+      "count": 1,
+      "last_used": 1777977529.176,
+      "last_action": "run"
+    },
+    "tests/userprog/create-long": {
+      "count": 1,
+      "last_used": 1777977529.176,
+      "last_action": "run"
+    },
+    "tests/userprog/create-exists": {
+      "count": 1,
+      "last_used": 1777977529.176,
+      "last_action": "run"
+    },
+    "tests/userprog/create-bound": {
+      "count": 1,
+      "last_used": 1777977529.176,
       "last_action": "run"
     }
   }
