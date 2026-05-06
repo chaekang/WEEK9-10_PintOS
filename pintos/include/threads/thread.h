@@ -125,6 +125,7 @@ struct  thread {
 	int next_fd;	// Open 때 줄 번호
 	struct file *exec_file;             /* 스레드가 지금 실행 중인 파일 */
 #endif
+
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
 	struct supplemental_page_table spt;

@@ -170,6 +170,19 @@ syscall_handler (struct intr_frame *f) {
 
 	}
 
+	case SYS_FILESIZE: {
+		int fd = (int) f->R.rdi;
+		struct fd_entry *entry = find_fd_entry(fd);
+		if (entry == NULL || entry->file == NULL) {
+			f->R.rax = -1;
+			break;
+		}
+		lock_acquire(&filesys_lock);
+		f->R.rax = file_length(entry->file);
+		lock_release(&filesys_lock);
+		break;
+	}
+
 	case SYS_WRITE: {
 		int fd = (int) f->R.rdi;
 		const void *buffer = (const void *) f->R.rsi;
@@ -264,6 +277,27 @@ syscall_handler (struct intr_frame *f) {
 		power_off();
 	}
 
+	case SYS_FORK: {
+		const char *thread_name = (const char *) f->R.rdi;
+		char *kbuf;
+		
+		kbuf = palloc_get_page(0);
+
+		if (kbuf == NULL) {
+			f->R.rax = TID_ERROR;
+			break;
+		}
+		
+		if (!copy_in_string(kbuf, thread_name, PGSIZE))	{
+			palloc_free_page(kbuf);
+			t->exit_status = -1;
+    		thread_exit();
+		}
+
+		f->R.rax = process_fork(kbuf, f);
+		break;
+	}
+
 	case SYS_WAIT: {
 		tid_t child_tid = (tid_t)f->R.rdi;
 		f->R.rax = process_wait(child_tid);
@@ -286,11 +320,13 @@ syscall_handler (struct intr_frame *f) {
     		thread_exit();
 		}
 
-		f->R.rax = process_exec(kbuf);
-		if (f->R.rax == -1) {
+		int ret = process_exec(kbuf);
+		if (ret == -1) {	
 			t->exit_status = -1;
-			thread_exit();
+    		thread_exit();
 		}
+		
+		f->R.rax = ret;
 		break;
 	}
 	

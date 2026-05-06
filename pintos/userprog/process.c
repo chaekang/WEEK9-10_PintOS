@@ -29,6 +29,7 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
+static void child_status_release (struct child_status *child);
 static struct child_status *child_status_create(void);
 
 struct child_status {
@@ -36,6 +37,8 @@ struct child_status {
 	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
 	bool exited;                   /* 자식이 종료했는지 여부 */
 	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	int ref_cnt;
+	struct lock lock;
 	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
 	struct list_elem elem;		   /* child list 리스트 노드 */
 };
@@ -51,6 +54,14 @@ struct fork_aux {
 struct initd_aux {
 	char *file_name;
 	struct child_status *child_status;
+};
+
+struct fork_aux {
+	struct thread *parent;
+	struct intr_frame parent_if;
+	struct child_status *child;
+	struct semaphore done_sema;
+	bool success;
 };
 
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
@@ -111,6 +122,7 @@ process_create_initd (const char *file_name) {
 		palloc_free_page(fn_copy);
 		return TID_ERROR;
 	}
+
 	aux->file_name = fn_copy;
 	aux->child_status = child;
 
@@ -121,6 +133,7 @@ process_create_initd (const char *file_name) {
 	if (tid == TID_ERROR) {
 		free(aux);
 		free(child);
+		palloc_free_page(tmp);
 		palloc_free_page (fn_copy);
 		return TID_ERROR;
 	}
@@ -179,6 +192,7 @@ process_fork (const char *name, struct intr_frame *if_) {
 		free(child);
 		return TID_ERROR;
 	}
+
 	aux->parent = cur;
 	memcpy(&aux->parent_if, if_, sizeof *if_);
 	aux->child_status = child;
@@ -186,18 +200,21 @@ process_fork (const char *name, struct intr_frame *if_) {
 	sema_init(&aux->fork_sema, 0);
 
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
-	if (tid == TID_ERROR) {
+  palloc_free_page((void *)name);
+	
+  if (tid == TID_ERROR) {
 		free(aux);
 		free(child);
 		return TID_ERROR;
 	}
+  
 	child->tid = tid;
-
 	list_push_back(&cur->child_list, &child->elem);
 	sema_down(&aux->fork_sema);
-	if (!aux->success) {
+	
+  if (!aux->success) {
 		list_remove(&child->elem);
-		free(child);
+		child_status_release(child);
 		free(aux);
 		return TID_ERROR;
 	}
@@ -214,6 +231,8 @@ static struct child_status *child_status_create(void) {
 	child->exit_status = 0;
 	child->exited = false;
 	child->waited = false;
+  child->ref_cnt = 2;
+	lock_init(&child->lock);
 	sema_init(&child->wait_sema, 0);
 
 	return child;
@@ -222,6 +241,7 @@ static struct child_status *child_status_create(void) {
 #ifndef VM
 /* 이 함수를 pml4_for_each에 넘겨 부모의 주소 공간을 복제한다.
  * project 2에서만 사용한다. */
+
 static bool
 duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
@@ -261,14 +281,14 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	}
 	return true;
 }
-
 #endif
 
 /* 부모의 실행 문맥을 복사하는 스레드 함수.
  * 힌트) parent->tf에는 프로세스의 사용자 영역 문맥이 들어 있지 않다.
  *       즉, process_fork의 두 번째 인자를 이 함수로 전달해야 한다. */
 static void
-__do_fork (void *aux) {
+__do_fork (void *aux_) {
+	struct fork_aux *aux = aux_;
 	struct intr_frame if_;
 	struct fork_aux *parent_aux = aux;
 	struct thread *current = thread_current ();
@@ -289,6 +309,7 @@ __do_fork (void *aux) {
 	}
 
 	process_activate(current);
+
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt)) {
@@ -336,6 +357,10 @@ int
 process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
+	struct thread *current = thread_current();
+	uint64_t *old_pml4 = current->pml4;
+	struct file *old_exec_file = current->exec_file;
+
 
 	/* thread 구조체 안의 intr_frame은 사용할 수 없다.
 	 * 현재 스레드가 다시 스케줄될 때 해당 멤버에 실행 정보가 저장되기
@@ -355,14 +380,11 @@ process_exec (void *f_name) {
 	 * 성공하면 기존 pml4 폐기, do_iret()
 	*/
 
-	struct thread *current = thread_current();
-	uint64_t *old_pml4 = current->pml4;
-
 	/* 그다음 바이너리를 적재한다. */
 	success = load (file_name, &_if);
+	palloc_free_page (file_name);
 
 	/* 적재에 실패하면 종료한다. */
-	palloc_free_page (file_name);
 	if (!success) {
 		uint64_t *new_pml4 = current->pml4;
 		current->pml4 = old_pml4;
@@ -374,6 +396,11 @@ process_exec (void *f_name) {
 		}
 
 		return -1;
+	}
+
+	if (old_exec_file != NULL) {
+    	file_allow_write(old_exec_file);
+    	file_close(old_exec_file);
 	}
 
 	if (old_pml4 != NULL) {
@@ -416,20 +443,27 @@ process_wait (tid_t child_tid) {
 		return -1;
 	}
 
+	lock_acquire(&child->lock); 
+
 	if (child->waited) {
+		lock_release(&child->lock);
 		return -1;
 	}
 
 	child->waited = true;
+	bool exited = child->exited;
+	lock_release(&child->lock);
 
-	if (!child->exited) {
+	if (!exited) {
 		sema_down(&child->wait_sema);
 	}
+
+	lock_acquire(&child->lock);
 	int status = child->exit_status;
+	lock_release(&child->lock);
 
 	list_remove(&child->elem);
-	free(child);
-
+	child_status_release(child);
 	return status;
 }
 
@@ -442,14 +476,44 @@ process_exit (void) {
 	 * TODO: (project2/process_termination.html 참고).
 	 * TODO: 프로세스 자원 정리도 여기서 구현하는 것을 권장한다. */
 
-	printf ("%s: exit(%d)\n", thread_name(), (int) curr->exit_status);
-		
+	if (curr->pml4 != NULL) {
+		printf ("%s: exit(%d)\n", thread_name(), (int) curr->exit_status);
+	}
+	
 	struct child_status *child = curr->my_status;
 
 	if (child != NULL) {
+		lock_acquire(&child->lock);
 		child->exit_status = curr->exit_status;
 		child->exited = true;
+		lock_release(&child->lock);
+
 		sema_up(&child->wait_sema);
+		child_status_release(child);
+	}
+
+	struct list_elem *e = list_begin(&curr->fd_list);
+
+	while (e != list_end(&curr->fd_list)) {
+		struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+		e = list_remove(e);
+
+		file_close(entry->file);
+		free(entry);
+	}
+
+	struct list_elem *e2 = list_begin(&curr->child_list);
+
+	while (e2 != list_end(&curr->child_list)) {
+		struct child_status *child = list_entry(e2, struct child_status, elem);
+		e2 = list_remove(e2);
+		child_status_release(child);
+	}
+
+	if (curr->exec_file != NULL) {
+		file_allow_write(curr->exec_file);
+		file_close(curr->exec_file);
+		curr->exec_file = NULL;
 	}
 
 	if (curr->exec_file != NULL) {
@@ -458,6 +522,26 @@ process_exit (void) {
 	}
 
 	process_cleanup ();
+}
+
+static void
+child_status_release (struct child_status *child) {
+	bool do_free = false;
+
+	if (child == NULL) {
+		return;
+	}
+
+	lock_acquire(&child->lock);
+	child->ref_cnt--;
+	ASSERT(child->ref_cnt >= 0);
+	do_free = (child->ref_cnt == 0);
+	lock_release(&child->lock);
+
+	if (do_free) {
+		free(child);
+	}
+
 }
 
 /* 현재 프로세스의 자원을 해제한다. */
@@ -721,8 +805,11 @@ load (const char *file_name, struct intr_frame *if_) {
 	memcpy((void *)if_->rsp, &fake_rex, sizeof(fake_rex));
 
 	if_->R.rdi = argc;
-	if_->R.rsi = argv_addr;
+	if_->R.rsi = (uint64_t)argv_addr;
 	success = true;
+
+	t->exec_file = file;
+	file = NULL;
 
 done:
 	/* We arrive here whether the load is successful or not. */
@@ -740,6 +827,7 @@ done:
 			t->exit_status = -1;
 		}
 	}
+
 	palloc_free_page(file_name_copy);
 	return success;
 }
