@@ -474,8 +474,10 @@ process_exit (void) {
 	struct child_status *child = curr->my_status;
 
 	if (child != NULL) {
+		lock_acquire(&child->lock);
 		child->exit_status = curr->exit_status;
 		child->exited = true;
+		lock_release(&child->lock);
 
 		sema_up(&child->wait_sema);
 		child_status_release(child);
