@@ -211,21 +211,24 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct fork_aux *parent_aux = aux;
 	struct thread *current = thread_current ();
-	/* TODO: parent_if를 적절히 전달한다. (즉, process_fork()의 if_) */
-	struct intr_frame *parent_if;
-	bool succ = true;
+	struct thread *parent = parent_aux->parent;
+	struct child_status *status = parent_aux->child_status;
+
+	process_init();
+	current->my_status = status;
 
 	/* 1. CPU 문맥을 로컬 스택으로 읽어온다. */
-	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	memcpy(&if_, &parent_aux->parent_if, sizeof(struct intr_frame));
+	if_.R.rax = 0;
 
 	/* 2. 페이지 테이블을 복제한다. */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
 		goto error;
 
-	process_activate (current);
+	process_activate(current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
@@ -235,18 +238,14 @@ __do_fork (void *aux) {
 		goto error;
 #endif
 
-	/* TODO: 여기에 코드를 작성한다.
-	 * TODO: 힌트) 파일 객체를 복제하려면 include/filesys/file.h의
-	 * TODO:       `file_duplicate`를 사용한다. 이 함수가 부모의 자원을
-	 * TODO:       성공적으로 복제하기 전까지 부모는 fork()에서 반환하면
-	 * TODO:       안 된다. */
-
-	process_init ();
-
-	/* 마지막으로 새로 만들어진 프로세스로 전환한다. */
-	if (succ)
-		do_iret (&if_);
+	status->success = true;
+	sema_up(&status->fork_sema);
+	free(parent_aux);
+	do_iret (&if_);
 error:
+	status->success = false;
+	sema_up(&status->fork_sema);
+	free(parent_aux);
 	thread_exit ();
 }
 
