@@ -120,7 +120,7 @@ find_fd_entry(int fd) {
 
 /* 메인 시스템 호출 인터페이스 */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
 
 	struct thread *t = thread_current();
@@ -207,7 +207,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = read((int) f->R.rdi, (void *) f->R.rsi, (unsigned) f->R.rdx);
 		break;
 	}
-	
+
 	case SYS_SEEK: {
 		int fd = (int)f->R.rdi;
 		unsigned position = (unsigned)f->R.rsi;
@@ -222,7 +222,25 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		lock_release(&filesys_lock);
 		break;
 	}
-	
+
+	case SYS_FILESIZE: {
+    int fd = (int) f->R.rdi;
+    struct fd_entry *entry = find_fd_entry(fd);
+    if (entry == NULL || entry->file == NULL)
+        f->R.rax = -1;
+    else
+        f->R.rax = file_length(entry->file);
+    break;
+	}
+
+	case SYS_FORK: {
+		const char *file = (const char *) f->R.rdi;
+		validate_user_string(file);
+		tid_t fork_result = process_fork(file, f);
+		f->R.rax = fork_result;
+		break;
+	}
+
 	case SYS_CLOSE: {
 		int fd = (int) f->R.rdi;
 		struct list_elem *e;

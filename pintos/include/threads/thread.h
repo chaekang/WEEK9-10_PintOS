@@ -119,8 +119,7 @@ struct  thread {
 #ifdef USERPROG
 	/* `userprog/process.c`가 관리한다. */
 	uint64_t *pml4;                     /* 4단계 페이지 맵. */
-
-	struct list child_list;             /* 자식 스레드 리스트 */
+ 	struct list child_list;            /* 자식 스레드 리스트 */
 	struct child_status *my_status;      /* 본인의 스레드 상태 */
 	struct list fd_list;	// 현재 프로세스가 열어둔 파일 목록
 	int next_fd;	// Open 때 줄 번호
