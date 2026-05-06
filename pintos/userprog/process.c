@@ -142,27 +142,38 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *parent = (struct thread *) aux;
 	void *parent_page;
 	void *newpage;
-	bool writable;
+	bool writable = is_writable (pte);
 
 	/* 1. TODO: parent_page가 커널 페이지라면 즉시 반환한다. */
+	if (is_kern_pte (pte))
+		return true;
 
 	/* 2. 부모의 페이지 맵 레벨 4에서 VA를 찾는다. */
 	parent_page = pml4_get_page (parent->pml4, va);
+	if (parent_page == NULL)
+		return false;
 
 	/* 3. TODO: 자식용 새 PAL_USER 페이지를 할당하고 결과를
 	 *    TODO: NEWPAGE에 저장한다. */
+	newpage = palloc_get_page (PAL_USER);
+	if (newpage == NULL)
+		return false;
 
 	/* 4. TODO: 부모 페이지 내용을 새 페이지로 복사하고,
 	 *    TODO: 부모 페이지의 쓰기 가능 여부를 확인해 그 결과에 따라
 	 *    TODO: WRITABLE을 설정한다. */
+	memcpy (newpage, parent_page, PGSIZE);
 
 	/* 5. VA 주소에 WRITABLE 권한으로 새 페이지를 자식의 페이지 테이블에
 	 *    추가한다. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: 페이지 삽입에 실패하면 오류 처리를 한다. */
+		palloc_free_page (newpage);
+		return false;
 	}
 	return true;
 }
+
 #endif
 
 /* 부모의 실행 문맥을 복사하는 스레드 함수.
@@ -171,7 +182,8 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *fork_aux) {
 	struct intr_frame if_;
-	struct fork_aux *parent = fork_aux;
+	struct fork_aux *aux = fork_aux;
+	struct thread *parent = aux->parents;
 	struct thread *current = thread_current ();
 	/* TODO: parent_if를 적절히 전달한다. (즉, process_fork()의 if_) */
 	struct intr_frame *parent_if = &parent->if_;
@@ -184,7 +196,6 @@ __do_fork (void *fork_aux) {
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
 		goto error;
-	pml4_for_each()
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
@@ -208,26 +219,6 @@ __do_fork (void *fork_aux) {
 		do_iret (&if_);
 error:
 	thread_exit ();
-}
-
-bool duplicate_pte(pte, va, aux) {
-	// va에 대응하는 pte 찾기: 이미 찾은거 아녀?
-	
-	// 자식 물리 주소 만들기
-	void *newpage = palloc_get_page(PAL_USER);
-	if (newpage == NULL) {
-		return;
-	}
-	// 새 물리주소에 부모 물리주소 안 data 복제
-	void *parent_page = pml4_get_page(parent->pml4, va);
-	if (parent_page == NULL) {
-		return;
-	}
-	memcpy(newpage, parent_page, PGSIZE);
-
-	// 자식 pml4에 새 물리주소 매핑
-	pml4_set_page(current->pml4, va, newpage, is_writable);
-	
 }
 
 /* Switch the current execution context to the f_name.
