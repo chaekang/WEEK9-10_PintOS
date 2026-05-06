@@ -294,8 +294,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		}
 		
 		f->R.rax = ret;
-		palloc_free_page(kbuf);
-
 		break;
 	}
 	
