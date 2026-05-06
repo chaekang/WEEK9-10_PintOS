@@ -48,6 +48,11 @@ struct fork_aux {
 	struct  child_status *child_status;	// 부모와 자식이 공유할 자식 상태표
 };
 
+struct initd_aux {
+	char *file_name;
+	struct child_status *status;
+};
+
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
 static void
 process_init (void) {
@@ -86,21 +91,51 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	}
 
+	struct child_status *child = child_status_create();
+	if (child == NULL) {
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+
+	struct initd_aux *aux;
+	aux = malloc(sizeof *aux);
+	if (aux == NULL) {
+		free(child);
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+
+	aux->file_name = fn_copy;
+	aux->status = child;
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
-	if (tid == TID_ERROR)
+	tid = thread_create(file_name, PRI_DEFAULT, initd, aux);
+	if (tid == TID_ERROR) {
+		free(child);
+		free(aux);
 		palloc_free_page (fn_copy);
+	}
+
+	child->tid = tid;
+	list_push_back(&thread_current()->child_list, &child->elem);
 	return tid;
 }
 
 /* A thread function that launches first user process. */
 static void
-initd (void *f_name) {
+initd (void *aux_) {
+	struct initd_aux *aux = aux_;
+	char *f_name = aux->file_name;
+	struct child_status *status = aux->status;
+
 #ifdef VM
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
+	free(aux);
+
 	process_init ();
+	thread_current()->my_status = status;
 
 	if (process_exec (f_name) < 0)
 		PANIC("Fail to launch initd\n");
