@@ -226,6 +226,14 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	}
 	
+	case SYS_FORK: {
+		const char *file = (const char *) f->R.rdi;
+		validate_user_string(file);
+		tid_t fork_result = process_fork(file, f);
+		f->R.rax = fork_result;
+		break;
+	}
+
 	case SYS_CLOSE: {
 		int fd = (int) f->R.rdi;
 		struct list_elem *e;

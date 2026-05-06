@@ -71,6 +71,9 @@ tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
+	struct thread *cur = thread_current ();
+	struct child_status *child;
+	struct initd_aux *aux;
 
 	/* FILE_NAME의 사본을 만든다.
 	 * 그렇지 않으면 호출자와 load() 사이에 경쟁 상태가 생긴다. */
@@ -107,32 +110,55 @@ process_create_initd (const char *file_name) {
 	aux->file_name = fn_copy;
 	aux->child_status = child;
 
+	/* initd도 부모 입장에서는 기다려야 하는 자식 프로세스다.
+	 * fork 자식과 같은 방식으로 child_status를 만들어 child_list에 등록한다. */
+	child = child_status_create ();
+	if (child == NULL) {
+		palloc_free_page(tmp);
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+
+	aux = malloc (sizeof *aux);
+	if (aux == NULL) {
+		free(child);
+		palloc_free_page(tmp);
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+	aux->file_name = fn_copy;
+	aux->child_status = child;
+
 	/* Create a new thread to execute FILE_NAME. */
-	tid = thread_create (file_name, PRI_DEFAULT, initd, aux);
+	tid = thread_create (tmp, PRI_DEFAULT, initd, aux);
+	palloc_free_page(tmp);
+  
 	if (tid == TID_ERROR) {
 		free(aux);
 		free(child);
 		palloc_free_page (fn_copy);
 		return TID_ERROR;
 	}
+
 	child->tid = tid;
-	list_push_back(&thread_current()->child_list, &child->elem);
+	list_push_back(&cur->child_list, &child->elem);
 	return tid;
 }
 
 /* A thread function that launches first user process. */
 static void
-initd (void *f_name) {
-	struct initd_aux *aux = f_name;
+initd (void *aux_) {
+	struct initd_aux *aux = aux_;
 	char *file_name = aux->file_name;
-	struct child_status *child = aux->child_status;
-
+	struct child_status *status = aux->child_status;
+  
 #ifdef VM
 	supplemental_page_table_init (&thread_current ()->spt);
 #endif
 
 	process_init ();
-	thread_current()->my_status = child;
+	/* process_wait()를 호출한 부모와 종료 상태를 공유할 수 있게 연결한다. */
+	thread_current()->my_status = status;
 	free(aux);
 
 	if (process_exec (file_name) < 0)
@@ -166,7 +192,7 @@ process_fork (const char *name, struct intr_frame *if_) {
 	struct fork_aux *aux = malloc(sizeof *aux);
 	if (aux == NULL) {
 		free(child);
- 		return TID_ERROR;
+		return TID_ERROR;
 	}
 	aux->parent = cur;
 	memcpy(&aux->parent_if, if_, sizeof *if_);
