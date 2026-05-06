@@ -223,10 +223,10 @@ syscall_handler (struct intr_frame *f) {
 
 	case SYS_SEEK: {
 		int fd = (int)f->R.rdi;
-		unsigned position = (unsigned)f->R.rsi;
+		off_t position = (off_t)f->R.rsi;
 		struct fd_entry *entry = find_fd_entry(fd);
 
-		if (entry == NULL || entry->file == NULL) {
+		if (entry == NULL || entry->file == NULL || position < 0) {
 			break;
 		}
 
@@ -303,11 +303,10 @@ syscall_handler (struct intr_frame *f) {
 		}
 
 		int ret = process_exec(kbuf);
-		if (ret == -1) {	
+		if (ret == -1) {
 			t->exit_status = -1;
-    		thread_exit();
+			thread_exit();
 		}
-		
 		f->R.rax = ret;
 		break;
 	}
