@@ -56,14 +56,6 @@ struct initd_aux {
 	struct child_status *child_status;
 };
 
-struct fork_aux {
-	struct thread *parent;
-	struct intr_frame parent_if;
-	struct child_status *child;
-	struct semaphore done_sema;
-	bool success;
-};
-
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
 static void
 process_init (void) {

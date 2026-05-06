@@ -236,24 +236,6 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	}
 
-	case SYS_FILESIZE: {
-    int fd = (int) f->R.rdi;
-    struct fd_entry *entry = find_fd_entry(fd);
-    if (entry == NULL || entry->file == NULL)
-        f->R.rax = -1;
-    else
-        f->R.rax = file_length(entry->file);
-    break;
-	}
-
-	case SYS_FORK: {
-		const char *file = (const char *) f->R.rdi;
-		validate_user_string(file);
-		tid_t fork_result = process_fork(file, f);
-		f->R.rax = fork_result;
-		break;
-	}
-
 	case SYS_CLOSE: {
 		int fd = (int) f->R.rdi;
 		struct list_elem *e;
@@ -276,7 +258,7 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_HALT: {
 		power_off();
 	}
-
+	
 	case SYS_FORK: {
 		const char *thread_name = (const char *) f->R.rdi;
 		char *kbuf;
