@@ -169,13 +169,12 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  * 힌트) parent->tf에는 프로세스의 사용자 영역 문맥이 들어 있지 않다.
  *       즉, process_fork의 두 번째 인자를 이 함수로 전달해야 한다. */
 static void
-__do_fork (void *aux) {
+__do_fork (void *fork_aux) {
 	struct intr_frame if_;
-	struct fork_aux *aux = 
-	struct thread *parent = (struct thread *) aux;
+	struct fork_aux *parent = fork_aux;
 	struct thread *current = thread_current ();
 	/* TODO: parent_if를 적절히 전달한다. (즉, process_fork()의 if_) */
-	struct intr_frame *parent_if;
+	struct intr_frame *parent_if = &parent->if_;
 	bool succ = true;
 
 	/* 1. CPU 문맥을 로컬 스택으로 읽어온다. */
@@ -185,7 +184,7 @@ __do_fork (void *aux) {
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
 		goto error;
-
+	pml4_for_each()
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
@@ -209,6 +208,26 @@ __do_fork (void *aux) {
 		do_iret (&if_);
 error:
 	thread_exit ();
+}
+
+bool duplicate_pte(pte, va, aux) {
+	// va에 대응하는 pte 찾기: 이미 찾은거 아녀?
+	
+	// 자식 물리 주소 만들기
+	void *newpage = palloc_get_page(PAL_USER);
+	if (newpage == NULL) {
+		return;
+	}
+	// 새 물리주소에 부모 물리주소 안 data 복제
+	void *parent_page = pml4_get_page(parent->pml4, va);
+	if (parent_page == NULL) {
+		return;
+	}
+	memcpy(newpage, parent_page, PGSIZE);
+
+	// 자식 pml4에 새 물리주소 매핑
+	pml4_set_page(current->pml4, va, newpage, is_writable);
+	
 }
 
 /* Switch the current execution context to the f_name.
