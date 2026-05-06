@@ -185,21 +185,32 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: parent_page가 커널 페이지라면 즉시 반환한다. */
+	if (is_kern_pte (pte))
+		return true;
 
 	/* 2. 부모의 페이지 맵 레벨 4에서 VA를 찾는다. */
 	parent_page = pml4_get_page (parent->pml4, va);
+	if (parent_page == NULL)
+		return false;
 
 	/* 3. TODO: 자식용 새 PAL_USER 페이지를 할당하고 결과를
 	 *    TODO: NEWPAGE에 저장한다. */
+	newpage = palloc_get_page (PAL_USER);
+	if (newpage == NULL)
+		return false;
 
 	/* 4. TODO: 부모 페이지 내용을 새 페이지로 복사하고,
 	 *    TODO: 부모 페이지의 쓰기 가능 여부를 확인해 그 결과에 따라
 	 *    TODO: WRITABLE을 설정한다. */
+	memcpy (newpage, parent_page, PGSIZE);
+	writable = is_writable (pte);
 
 	/* 5. VA 주소에 WRITABLE 권한으로 새 페이지를 자식의 페이지 테이블에
 	 *    추가한다. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: 페이지 삽입에 실패하면 오류 처리를 한다. */
+		palloc_free_page (newpage);
+		return false;
 	}
 	return true;
 }
