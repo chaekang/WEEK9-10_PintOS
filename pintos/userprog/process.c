@@ -34,7 +34,8 @@ struct child_status {
 	tid_t tid;                     /* 자식 스레드 tid */
 	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
 	bool exited;                   /* 자식이 종료했는지 여부 */
-	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	bool waited;
+	bool fork_success              /* 부모가 자식에 대해서 wait() 했는지 여부 */
 	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
 	struct list_elem elem;         /* child list 리스트 노드 */
 };
@@ -45,7 +46,6 @@ process_init (void) {
 	struct thread *current = thread_current ();
 
 	list_init(&current->child_list);
-	current->my_status = NULL;
 }
 
 /* FILE_NAME에서 읽어들인 첫 번째 사용자 영역 프로그램 "initd"를 시작한다.
@@ -111,13 +111,26 @@ static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size) {
 	return token != NULL;
 }
 
+/* 자식 process에게 넘길 fork_aux 구조체를 만든다 */
+struct fork_aux {
+	struct thread *parents;
+	struct intr_frame if_;
+	struct child_status *child_status;
+};
 /* 현재 프로세스를 `name`이라는 이름으로 복제한다. 성공하면 새 프로세스의
  * 스레드 ID를 반환하고, 스레드를 만들 수 없으면 TID_ERROR를 반환한다. */
-tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* 현재 스레드를 새 스레드로 복제한다. */
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	struct fork_aux *fork_aux = malloc(sizeof(*fork_aux));
+	fork_aux->if_ = *if_;
+	fork_aux->parents = thread_current(); 
+	
+	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, fork_aux);
+	
+	sema_down(fork_aux->child_status); // child_status에 sema가 없음 추가해야
+	process_init();
+	
+	return tid;
 }
 
 #ifndef VM
@@ -158,6 +171,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
 	struct intr_frame if_;
+	struct fork_aux *aux = 
 	struct thread *parent = (struct thread *) aux;
 	struct thread *current = thread_current ();
 	/* TODO: parent_if를 적절히 전달한다. (즉, process_fork()의 if_) */
@@ -165,7 +179,7 @@ __do_fork (void *aux) {
 	bool succ = true;
 
 	/* 1. CPU 문맥을 로컬 스택으로 읽어온다. */
-	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	memcpy(&if_, parent_if, sizeof (struct intr_frame));
 
 	/* 2. 페이지 테이블을 복제한다. */
 	current->pml4 = pml4_create();
