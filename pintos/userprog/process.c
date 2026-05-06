@@ -29,14 +29,23 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
+static struct child_status *child_status_create(void);
 
 struct child_status {
 	tid_t tid;                     /* 자식 스레드 tid */
 	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
 	bool exited;                   /* 자식이 종료했는지 여부 */
 	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	bool success;				   // 자식의 주소공간/자원 복사 성공 여부
 	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
-	struct list_elem elem;         /* child list 리스트 노드 */
+	struct semaphore fork_sema;	   // 자식의 fork 초기화 완료를 부모게 알리는 세마포어
+	struct list_elem elem;		   /* child list 리스트 노드 */
+};
+
+struct fork_aux {
+	struct thread *parent;	// fork 를 호출한 부모 스레드
+	struct intr_frame parent_if;	// fork 시점의 부모 실행 문맥 복사본
+	struct  child_status *child_status;	// 부모와 자식이 공유할 자식 상태표
 };
 
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
@@ -114,10 +123,54 @@ static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size) {
 /* 현재 프로세스를 `name`이라는 이름으로 복제한다. 성공하면 새 프로세스의
  * 스레드 ID를 반환하고, 스레드를 만들 수 없으면 TID_ERROR를 반환한다. */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	/* 현재 스레드를 새 스레드로 복제한다. */
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+process_fork (const char *name, struct intr_frame *if_) {
+	struct thread *cur = thread_current();
+	struct child_status *child = child_status_create();
+	if (child == NULL) {
+		return TID_ERROR;
+	}
+
+	struct fork_aux *aux = malloc(sizeof *aux);
+	if (aux == NULL) {
+		free(child);
+		return TID_ERROR;
+	}
+	aux->parent = cur;
+	memcpy(&aux->parent_if, if_, sizeof *if_);
+	aux->child_status = child;
+
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
+	if (tid == TID_ERROR) {
+		free(aux);
+		free(child);
+		return TID_ERROR;
+	}
+	child->tid = tid;
+
+	list_push_back(&cur->child_list, &child->elem);
+	sema_down(&child->fork_sema);
+	if (!child->success) {
+		list_remove(&child->elem);
+		free(child);
+		return TID_ERROR;
+	}
+	return child->tid;
+}
+
+static struct child_status *child_status_create(void) {
+	struct child_status *child = malloc(sizeof *child);
+	if (child == NULL) {
+		return NULL;
+	}
+	child->tid = TID_ERROR;
+	child->exit_status = 0;
+	child->exited = false;
+	child->waited = false;
+	child->success = false;
+	sema_init(&child->fork_sema, 0);
+	sema_init(&child->wait_sema, 0);
+
+	return child;
 }
 
 #ifndef VM
