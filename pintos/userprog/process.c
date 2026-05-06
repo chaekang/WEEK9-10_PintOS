@@ -59,6 +59,7 @@ process_init (void) {
 	struct thread *current = thread_current ();
 
 	list_init(&current->child_list);
+	current->exec_file = NULL;
 	current->my_status = NULL;
 }
 
@@ -451,6 +452,11 @@ process_exit (void) {
 		sema_up(&child->wait_sema);
 	}
 
+	if (curr->exec_file != NULL) {
+		file_close(curr->exec_file);
+		curr->exec_file = NULL;
+	}
+
 	process_cleanup ();
 }
 
@@ -596,6 +602,8 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	file_deny_write(file);
+
 	/* 실행 파일 헤더를 읽고 검증한다. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -718,8 +726,19 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	if (file != NULL) {
-		file_close (file);
+	if (success) {
+		if (t->exec_file != NULL) {
+			file_close(t->exec_file);
+		}
+
+		t->exec_file = file;
+		file = NULL;
+	}
+	else {
+		if (file != NULL) {
+			file_close (file);
+			t->exit_status = -1;
+		}
 	}
 	palloc_free_page(file_name_copy);
 	return success;

@@ -208,6 +208,21 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	}
 
+	case SYS_SEEK: {
+		int fd = (int)f->R.rdi;
+		unsigned position = (unsigned)f->R.rsi;
+		struct fd_entry *entry = find_fd_entry(fd);
+
+		if (entry == NULL || entry->file == NULL) {
+			break;
+		}
+
+		lock_acquire(&filesys_lock);
+		file_seek(entry->file, position);
+		lock_release(&filesys_lock);
+		break;
+	}
+
 	case SYS_FILESIZE: {
     int fd = (int) f->R.rdi;
     struct fd_entry *entry = find_fd_entry(fd);
@@ -272,6 +287,10 @@ syscall_handler (struct intr_frame *f) {
 		}
 
 		f->R.rax = process_exec(kbuf);
+		if (f->R.rax == -1) {
+			t->exit_status = -1;
+			thread_exit();
+		}
 		break;
 	}
 	

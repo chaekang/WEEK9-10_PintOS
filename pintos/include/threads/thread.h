@@ -123,7 +123,7 @@ struct  thread {
 	struct child_status *my_status;      /* 본인의 스레드 상태 */
 	struct list fd_list;	// 현재 프로세스가 열어둔 파일 목록
 	int next_fd;	// Open 때 줄 번호
-
+	struct file *exec_file;             /* 스레드가 지금 실행 중인 파일 */
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */
