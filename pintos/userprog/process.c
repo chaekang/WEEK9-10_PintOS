@@ -29,15 +29,23 @@ static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
 static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size);
+static struct child_status *child_status_create(void);
 
 struct child_status {
 	tid_t tid;                     /* 자식 스레드 tid */
 	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
 	bool exited;                   /* 자식이 종료했는지 여부 */
-	bool waited;
-	bool fork_success              /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
+	bool success;				   // 자식의 주소공간/자원 복사 성공 여부
 	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
-	struct list_elem elem;         /* child list 리스트 노드 */
+	struct semaphore fork_sema;	   // 자식의 fork 초기화 완료를 부모게 알리는 세마포어
+	struct list_elem elem;		   /* child list 리스트 노드 */
+};
+
+struct fork_aux {
+	struct thread *parent;	// fork 를 호출한 부모 스레드
+	struct intr_frame parent_if;	// fork 시점의 부모 실행 문맥 복사본
+	struct  child_status *child_status;	// 부모와 자식이 공유할 자식 상태표
 };
 
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
@@ -46,6 +54,7 @@ process_init (void) {
 	struct thread *current = thread_current ();
 
 	list_init(&current->child_list);
+	current->my_status = NULL;
 }
 
 /* FILE_NAME에서 읽어들인 첫 번째 사용자 영역 프로그램 "initd"를 시작한다.
@@ -111,26 +120,57 @@ static bool parse_filename(const char *file_name, char *tmp, size_t tmp_size) {
 	return token != NULL;
 }
 
-/* 자식 process에게 넘길 fork_aux 구조체를 만든다 */
-struct fork_aux {
-	struct thread *parents;
-	struct intr_frame if_;
-	struct child_status *child_status;
-};
 /* 현재 프로세스를 `name`이라는 이름으로 복제한다. 성공하면 새 프로세스의
  * 스레드 ID를 반환하고, 스레드를 만들 수 없으면 TID_ERROR를 반환한다. */
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	/* 현재 스레드를 새 스레드로 복제한다. */
-	struct fork_aux *fork_aux = malloc(sizeof(*fork_aux));
-	fork_aux->if_ = *if_;
-	fork_aux->parents = thread_current(); 
-	
-	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, fork_aux);
-	
-	sema_down(fork_aux->child_status); // child_status에 sema가 없음 추가해야
-	process_init();
-	
-	return tid;
+tid_t
+process_fork (const char *name, struct intr_frame *if_) {
+	struct thread *cur = thread_current();
+	struct child_status *child = child_status_create();
+	if (child == NULL) {
+		return TID_ERROR;
+	}
+
+	struct fork_aux *aux = malloc(sizeof *aux);
+	if (aux == NULL) {
+		free(child);
+		return TID_ERROR;
+	}
+	aux->parent = cur;
+	memcpy(&aux->parent_if, if_, sizeof *if_);
+	aux->child_status = child;
+
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
+	if (tid == TID_ERROR) {
+		free(aux);
+		free(child);
+		return TID_ERROR;
+	}
+	child->tid = tid;
+
+	list_push_back(&cur->child_list, &child->elem);
+	sema_down(&child->fork_sema);
+	if (!child->success) {
+		list_remove(&child->elem);
+		free(child);
+		return TID_ERROR;
+	}
+	return child->tid;
+}
+
+static struct child_status *child_status_create(void) {
+	struct child_status *child = malloc(sizeof *child);
+	if (child == NULL) {
+		return NULL;
+	}
+	child->tid = TID_ERROR;
+	child->exit_status = 0;
+	child->exited = false;
+	child->waited = false;
+	child->success = false;
+	sema_init(&child->fork_sema, 0);
+	sema_init(&child->wait_sema, 0);
+
+	return child;
 }
 
 #ifndef VM
@@ -144,7 +184,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	void *newpage;
 	bool writable = is_writable (pte);
 
-	/* 1. TODO: parent_page가 커널 페이지라면 즉시 반환한다. */
+	/* 1. TODO: parent_page가 커널 페이지라면 즉시 반환 후 다음 페이지 순회. */
 	if (is_kern_pte (pte))
 		return true;
 
@@ -180,23 +220,26 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  * 힌트) parent->tf에는 프로세스의 사용자 영역 문맥이 들어 있지 않다.
  *       즉, process_fork의 두 번째 인자를 이 함수로 전달해야 한다. */
 static void
-__do_fork (void *fork_aux) {
+__do_fork (void *aux) {
 	struct intr_frame if_;
-	struct fork_aux *aux = fork_aux;
-	struct thread *parent = aux->parents;
+	struct fork_aux *parent_aux = aux;
 	struct thread *current = thread_current ();
-	/* TODO: parent_if를 적절히 전달한다. (즉, process_fork()의 if_) */
-	struct intr_frame *parent_if = &parent->if_;
-	bool succ = true;
+	struct thread *parent = parent_aux->parent;
+	struct child_status *status = parent_aux->child_status;
+
+	process_init();
+	current->my_status = status;
 
 	/* 1. CPU 문맥을 로컬 스택으로 읽어온다. */
-	memcpy(&if_, parent_if, sizeof (struct intr_frame));
+	memcpy(&if_, &parent_aux->parent_if, sizeof(struct intr_frame));
+	if_.R.rax = 0;
 
 	/* 2. 페이지 테이블을 복제한다. */
 	current->pml4 = pml4_create();
 	if (current->pml4 == NULL)
 		goto error;
-	process_activate (current);
+
+	process_activate(current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
@@ -206,18 +249,34 @@ __do_fork (void *fork_aux) {
 		goto error;
 #endif
 
-	/* TODO: 여기에 코드를 작성한다.
-	 * TODO: 힌트) 파일 객체를 복제하려면 include/filesys/file.h의
-	 * TODO:       `file_duplicate`를 사용한다. 이 함수가 부모의 자원을
-	 * TODO:       성공적으로 복제하기 전까지 부모는 fork()에서 반환하면
-	 * TODO:       안 된다. */
+	current->next_fd = parent->next_fd;
+	struct list_elem *e;
+	for (e = list_begin(&parent->fd_list);
+		 e != list_end(&parent->fd_list);
+		 e = list_next(e)) {
+		struct fd_entry *entry = list_entry(e, struct fd_entry, elem);
+		struct fd_entry *child_entry = malloc(sizeof *child_entry);
+		if (child_entry == NULL) {
+			goto error;
+		}
+		struct file *file = file_duplicate(entry->file);
+		if (file == NULL) {
+			free(child_entry);
+			goto error;
+		}
+		child_entry->fd = entry->fd;
+		child_entry->file = file;
+		list_push_back(&current->fd_list, &child_entry->elem);
+	}
 
-	process_init ();
-
-	/* 마지막으로 새로 만들어진 프로세스로 전환한다. */
-	if (succ)
-		do_iret (&if_);
+	status->success = true;
+	sema_up(&status->fork_sema);
+	free(parent_aux);
+	do_iret (&if_);
 error:
+	status->success = false;
+	sema_up(&status->fork_sema);
+	free(parent_aux);
 	thread_exit ();
 }
 
