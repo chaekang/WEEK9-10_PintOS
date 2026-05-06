@@ -93,22 +93,6 @@ process_create_initd (const char *file_name) {
 		palloc_free_page(fn_copy);
 		return TID_ERROR;
 	}
-	palloc_free_page(tmp);
-
-	struct child_status *child = child_status_create();
-	if (child == NULL) {
-		palloc_free_page(fn_copy);
-		return TID_ERROR;
-	}
-
-	struct initd_aux *aux = malloc(sizeof *aux);
-	if (aux == NULL) {
-		free(child);
-		palloc_free_page(fn_copy);
-		return TID_ERROR;
-	}
-	aux->file_name = fn_copy;
-	aux->child_status = child;
 
 	/* initd도 부모 입장에서는 기다려야 하는 자식 프로세스다.
 	 * fork 자식과 같은 방식으로 child_status를 만들어 child_list에 등록한다. */
