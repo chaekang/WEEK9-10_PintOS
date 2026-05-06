@@ -125,6 +125,8 @@ struct  thread {
 	struct list fd_list;	// 현재 프로세스가 열어둔 파일 목록
 	int next_fd;	// Open 때 줄 번호
 
+	struct file *exec_file;
+
 #endif
 #ifdef VM
 	/* 스레드가 소유한 전체 가상 메모리용 테이블. */

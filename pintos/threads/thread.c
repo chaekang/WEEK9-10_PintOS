@@ -633,6 +633,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->my_status = NULL;
 	list_init(&t->fd_list);
 	t->next_fd = 2;
+	t->exec_file = NULL;
 	#endif
 
 	t->nice = 0;
