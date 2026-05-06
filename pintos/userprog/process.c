@@ -36,9 +36,7 @@ struct child_status {
 	int exit_status;               /* 자식이 exit()할 때 남긴 종료 코드 */
 	bool exited;                   /* 자식이 종료했는지 여부 */
 	bool waited;                   /* 부모가 자식에 대해서 wait() 했는지 여부 */
-	bool success;				   // 자식의 주소공간/자원 복사 성공 여부
 	struct semaphore wait_sema;    /* 부모가 자식 종료를 기다릴 때 사용하는 세마포어 */
-	struct semaphore fork_sema;	   // 자식의 fork 초기화 완료를 부모게 알리는 세마포어
 	struct list_elem elem;		   /* child list 리스트 노드 */
 };
 
@@ -46,6 +44,8 @@ struct fork_aux {
 	struct thread *parent;	// fork 를 호출한 부모 스레드
 	struct intr_frame parent_if;	// fork 시점의 부모 실행 문맥 복사본
 	struct  child_status *child_status;	// 부모와 자식이 공유할 자식 상태표
+	struct semaphore fork_sema;	// 자식의 fork 초기화 완료를 부모에게 알리는 세마포어
+	bool success;	// 자식의 주소공간/자원 복사 성공 여부
 };
 
 /* initd와 그 외 프로세스에서 공통으로 사용하는 초기화 함수. */
@@ -133,11 +133,13 @@ process_fork (const char *name, struct intr_frame *if_) {
 	struct fork_aux *aux = malloc(sizeof *aux);
 	if (aux == NULL) {
 		free(child);
-		return TID_ERROR;
+ 		return TID_ERROR;
 	}
 	aux->parent = cur;
 	memcpy(&aux->parent_if, if_, sizeof *if_);
 	aux->child_status = child;
+	aux->success = false;
+	sema_init(&aux->fork_sema, 0);
 
 	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, aux);
 	if (tid == TID_ERROR) {
@@ -148,12 +150,14 @@ process_fork (const char *name, struct intr_frame *if_) {
 	child->tid = tid;
 
 	list_push_back(&cur->child_list, &child->elem);
-	sema_down(&child->fork_sema);
-	if (!child->success) {
+	sema_down(&aux->fork_sema);
+	if (!aux->success) {
 		list_remove(&child->elem);
 		free(child);
+		free(aux);
 		return TID_ERROR;
 	}
+	free(aux);
 	return child->tid;
 }
 
@@ -166,8 +170,6 @@ static struct child_status *child_status_create(void) {
 	child->exit_status = 0;
 	child->exited = false;
 	child->waited = false;
-	child->success = false;
-	sema_init(&child->fork_sema, 0);
 	sema_init(&child->wait_sema, 0);
 
 	return child;
@@ -190,14 +192,16 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 2. 부모의 페이지 맵 레벨 4에서 VA를 찾는다. */
 	parent_page = pml4_get_page (parent->pml4, va);
-	if (parent_page == NULL)
+	if (parent_page == NULL) {
 		return false;
+	}
 
 	/* 3. TODO: 자식용 새 PAL_USER 페이지를 할당하고 결과를
 	 *    TODO: NEWPAGE에 저장한다. */
 	newpage = palloc_get_page (PAL_USER);
-	if (newpage == NULL)
+	if (newpage == NULL) {
 		return false;
+	}
 
 	/* 4. TODO: 부모 페이지 내용을 새 페이지로 복사하고,
 	 *    TODO: 부모 페이지의 쓰기 가능 여부를 확인해 그 결과에 따라
@@ -236,17 +240,20 @@ __do_fork (void *aux) {
 
 	/* 2. 페이지 테이블을 복제한다. */
 	current->pml4 = pml4_create();
-	if (current->pml4 == NULL)
+	if (current->pml4 == NULL) {
 		goto error;
+	}
 
 	process_activate(current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
-	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
+	if (!supplemental_page_table_copy (&current->spt, &parent->spt)) {
 		goto error;
+	}
 #else
-	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
+	if (!pml4_for_each (parent->pml4, duplicate_pte, parent)) {
 		goto error;
+	}
 #endif
 
 	current->next_fd = parent->next_fd;
@@ -269,14 +276,13 @@ __do_fork (void *aux) {
 		list_push_back(&current->fd_list, &child_entry->elem);
 	}
 
-	status->success = true;
-	sema_up(&status->fork_sema);
-	free(parent_aux);
+	parent_aux->success = true;
+	sema_up(&parent_aux->fork_sema);
 	do_iret (&if_);
 error:
-	status->success = false;
-	sema_up(&status->fork_sema);
-	free(parent_aux);
+	current->my_status = NULL;
+	parent_aux->success = false;
+	sema_up(&parent_aux->fork_sema);
 	thread_exit ();
 }
 
@@ -393,7 +399,7 @@ process_exit (void) {
 	 * TODO: 프로세스 자원 정리도 여기서 구현하는 것을 권장한다. */
 
 	printf ("%s: exit(%d)\n", thread_name(), (int) curr->exit_status);
-	
+		
 	struct child_status *child = curr->my_status;
 
 	if (child != NULL) {

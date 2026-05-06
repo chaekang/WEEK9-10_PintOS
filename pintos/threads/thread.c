@@ -629,6 +629,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
 	#ifdef USERPROG
+	list_init(&t->child_list);
+	t->my_status = NULL;
 	list_init(&t->fd_list);
 	t->next_fd = 2;
 	#endif
